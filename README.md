@@ -161,7 +161,7 @@ sudo apt-get install libfftw3-dev libsndfile1-dev libopenblas-dev libpng-dev lib
 
 ### Step 2: Clone the Repository
 ```bash
-git clone https://github.com/8g6-new/CARA && cd CARA
+git clone --depth 1  https://github.com/8g6-new/CARA && cd CARA
 ```
 
 ### Step 3: Build the Project
