@@ -3,7 +3,7 @@ CC       = gcc
 # beyond O2 its found that NAN == NAN (UB)
 
 #_______________________General optimization flags__________________________________
-OPTFLAGS+=-ffast-math#                   => Enables aggressive optimizations beyond -O2, including unsafe floating-point optimizations
+OPTFLAGS+=-O3#                      => Enables aggressive optimizations beyond -O2, including unsafe floating-point optimizations
 OPTFLAGS+=-march=native#            => Generates code optimized for the host CPU
 OPTFLAGS+=-mtune=native#            => Optimizes code scheduling for the host CPU
 OPTFLAGS+=-funroll-loops#           => Unrolls loops to reduce branch overhead
@@ -19,21 +19,14 @@ OPTFLAGS+=-fipa-pta#                => Enables interprocedural pointer analysis 
 OPTFLAGS+=-fipa-cp#                 => Performs constant propagation across functions
 OPTFLAGS+=-fipa-sra#                => Optimizes function arguments and return values for efficiency
 OPTFLAGS+=-fipa-icf#                => Merges identical functions to reduce code size
+OPTFLAGS+=-fno-unsafe-math-optimizations
 
 
 #_______________________Says compiler to vectorize loops_________________________________________
 VECFLAGS+=-ftree-vectorize#         => Enables automatic vectorization of loops
 VECFLAGS+=-ftree-loop-vectorize#    => Enables loop-based vectorization
 VECFLAGS+=-fopt-info-vec-optimized# => Outputs details of vectorized loops
-
-#_______________________SIMD Instructions that are used for vectorizing _________________________________________
-VECFLAGS+=-mavx#                    => SIMD flags (4 Byte)
-VECFLAGS+=-msse4.2#                 => Enables SSE4.2 instruction set (4 Byte)
-VECFLAGS+=-mavx2#                   => SIMD flags (8 Byte)
-VECFLAGS+=-mfma#                    => Enables Fused Multiply-Add (FMA) instructions 
-VECFLAGS+=-mf16c#                   => Enables 16-bit floating-point conversion instructions
-VECFLAGS+=-mabm#                    => Enables Advanced Bit Manipulation instructions
-VECFLAGS+=-mf16c#                   => Enables 16-bit floating-point conversion instructions
+# VECFLAGS+=-fopt-info-vec-all#     => Shows ALL vectorization attempts
 
 #_______________________Debugging and safety flags__________________________________
 DBGFLAGS+=-Og#                      => Optimizations suitable for debugging
@@ -45,13 +38,15 @@ DBGFLAGS+=-fsanitize=address#       => Enables AddressSanitizer for memory error
 DBGFLAGS+=-fsanitize=leak#          => Enables leak detection
 DBGFLAGS+=-fsanitize=undefined#     => Enables Undefined Behavior Sanitizer (UBSan)
 
-
-LIBFLAGS = -DMINIMP3_FLOAT_OUTPUT
+LIBFLAGS  = -DMINIMP3_FLOAT_OUTPUT 
 WARNFLAGS = -Wall -Wextra 
+LOGFLAGS  = -DLOG_LEVEL=1
 
-CFLAGS = $(WARNFLAGS) $(OPTFLAGS) $(VECFLAGS) $(LIBFLAGS) -fopenmp
-CFLAGS_DEBUG = -g -O0 -DDEBUG
-LDFLAGS = -lm -lfftw3 -lfftw3f -lsndfile -lpng -fopenmp -lopenblas 
+INC_DIR   = headers
+
+CFLAGS = -std=c11 $(WARNFLAGS) $(OPTFLAGS) $(VECFLAGS) $(LIBFLAGS) $(LOGFLAGS) -fopenmp -I$(INC_DIR)
+CFLAGS_DEBUG = $(WARNFLAGS) $(DBGFLAGS) $(LIBFLAGS) $(LOGFLAGS) -fopenmp -I$(INC_DIR) -std=c11
+LDFLAGS = -lm -lfftw3 -lfftw3f -lsndfile -lpng -fopenmp -lopenblas
 
 # Directory Structure
 SRCDIR     = src
@@ -86,7 +81,7 @@ else
 endif
 
 # Default Target
-.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run shared prep_dirs
+.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run prep_dirs
 
 all: $(LAST_TARGET)
 
@@ -96,7 +91,7 @@ prep_dirs:
 	@mkdir -p $(BUILDDIR)/opencv
 	@mkdir -p $(dir $(BASE_OBJECTS_BUILTIN) $(BASE_OBJECTS_OPENCV) $(BUILTIN_OBJECTS) $(OPENCV_OBJECTS))
 
-# OpenCV Color Scheme Build - Run prep_dirs first then compile objects
+# OpenCV Color Scheme Build
 opencv_like: 
 	@$(MAKE) prep_dirs
 	@$(MAKE) $(BASE_OBJECTS_OPENCV) $(OPENCV_OBJECTS)
@@ -104,7 +99,7 @@ opencv_like:
 	@echo "opencv_like" > $(LAST_TARGET_FILE)
 	@echo "Built with OpenCV-like color scheme"
 
-# Builtin Color Scheme Build - Run prep_dirs first then compile objects
+# Builtin Color Scheme Build
 builtin: 
 	@$(MAKE) prep_dirs
 	@$(MAKE) $(BASE_OBJECTS_BUILTIN) $(BUILTIN_OBJECTS)
@@ -113,31 +108,22 @@ builtin:
 	@echo "Built with Builtin color scheme"
 
 # Debug Build with OpenCV-like Color Scheme
-debug_opencv_like: CFLAGS = $(CFLAGS_DEBUG) $(LIBFLAGS)
 debug_opencv_like: clean
 	@$(MAKE) prep_dirs
-	@$(MAKE) CFLAGS="$(CFLAGS) -DOPENCV_LIKE" $(BASE_OBJECTS_OPENCV) $(OPENCV_OBJECTS)
-	$(CC) $(CFLAGS) -DOPENCV_LIKE -o opencv_like $(BASE_OBJECTS_OPENCV) $(OPENCV_OBJECTS) $(LDFLAGS)
+	@$(MAKE) CFLAGS="$(CFLAGS_DEBUG) -DOPENCV_LIKE" $(BASE_OBJECTS_OPENCV) $(OPENCV_OBJECTS)
+	$(CC) $(CFLAGS_DEBUG) -DOPENCV_LIKE -o opencv_like $(BASE_OBJECTS_OPENCV) $(OPENCV_OBJECTS) $(LDFLAGS)
 	@echo "opencv_like" > $(LAST_TARGET_FILE)
 	@echo "Debug build with OpenCV-like color scheme"
 
 # Debug Build with Builtin Color Scheme
-debug_builtin: CFLAGS = $(CFLAGS_DEBUG) $(LIBFLAGS)
 debug_builtin: clean
 	@$(MAKE) prep_dirs
-	@$(MAKE) CFLAGS="$(CFLAGS) -DBUILTIN" $(BASE_OBJECTS_BUILTIN) $(BUILTIN_OBJECTS)
-	$(CC) $(CFLAGS) -DBUILTIN -o builtin $(BASE_OBJECTS_BUILTIN) $(BUILTIN_OBJECTS) $(LDFLAGS)
+	@$(MAKE) CFLAGS="$(CFLAGS_DEBUG) -DBUILTIN" $(BASE_OBJECTS_BUILTIN) $(BUILTIN_OBJECTS)
+	$(CC) $(CFLAGS_DEBUG) -DBUILTIN -o builtin $(BASE_OBJECTS_BUILTIN) $(BUILTIN_OBJECTS) $(LDFLAGS)
 	@echo "builtin" > $(LAST_TARGET_FILE)
 	@echo "Debug build with Builtin color scheme"
 
-# Shared Library Build
-shared:
-	@$(MAKE) prep_dirs
-	@$(MAKE) $(BASE_OBJECTS_BUILTIN) $(BUILTIN_OBJECTS) $(BASE_OBJECTS_OPENCV) $(OPENCV_OBJECTS)
-	$(CC) -shared -o libyourlib.so $(BASE_OBJECTS_BUILTIN) $(BUILTIN_OBJECTS) $(LDFLAGS)
-	@echo "Shared library libyourlib.so built successfully."
-
-# Compilation Rules with proper defines
+# Compilation Rules
 $(BUILDDIR)/builtin/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -DBUILTIN -MMD -MP -c $< -o $@
@@ -153,25 +139,37 @@ $(BUILDDIR)/opencv/%.o: %.c
 -include $(OPENCV_OBJECTS:.o=.d)
 
 # Debug Build
-debug: CFLAGS = $(CFLAGS_DEBUG)
-debug: clean $(LAST_TARGET)
-	@echo "Built in Debug Mode"
+debug: debug_$(LAST_TARGET)
+	@echo "Built $(LAST_TARGET) in Debug Mode"
 
+# Run Last Target
 run:
 	@if [ ! -f "$(LAST_TARGET_FILE)" ]; then \
 	  echo "No previous build found. Run 'make' first."; exit 1; \
 	fi; \
 	LAST_TARGET=$$(cat $(LAST_TARGET_FILE)); \
-	if [ "$$LAST_TARGET" = "shared" ]; then \
-	  echo "Last build was a shared library. Nothing to run."; exit 1; \
-	fi; \
 	if [ ! -x "$$LAST_TARGET" ]; then \
 	  echo "Executable '$$LAST_TARGET' not found. Run 'make' first."; exit 1; \
 	fi; \
 	echo "Running $$LAST_TARGET..."; \
-	./$$LAST_TARGET "./tests/files/black_woodpecker.wav" bird 2048 128 hann 256 0 7500 128 14 16 4 "./cache/FFT"
+	./$$LAST_TARGET \
+    -i "/home/dsb/disks/others/fdm/8-12-25/Modified Group Delay.mp3" \
+    -o "bird" \
+    -ws 512 \
+    -hop 128 \
+    -wf "hann" \
+    -nm 64 \
+    -mi_feq 0 \
+    -mx_feq 8000 \
+    -nfcc 12 \
+    -stft_cs 4 \
+    -fb_cs 6 \
+    -fcc_cs 17 \
+    -fb "mel" \
+    -c "./cache/FFT" \
+    -t 4
 
+# Clean Build
 clean:
 	rm -rf $(BUILDDIR)
-	rm -f builtin opencv_like main $(LAST_TARGET_FILE) libyourlib.so
-
+	rm -f builtin opencv_like main $(LAST_TARGET_FILE)

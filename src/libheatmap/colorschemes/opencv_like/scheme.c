@@ -1,4 +1,4 @@
-#include "../../../../headers/libheatmap/colorschemes/opencv_like_scheme.h"
+#include "libheatmap/colorschemes/opencv_like_scheme.h"
 
 DEF_CS(autumn, 1024, 0);
 DEF_CS(bone, 1024, 1);
