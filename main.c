@@ -2,6 +2,31 @@
 #include "utils/bench.h"
 #include "utils/cli.h"
 
+/**
+ * Finalize and clamp Mel/MFCC-related options based on STFT results.
+ *
+ * When Mel or MFCC computation is requested, computes the STFT bin range
+ * corresponding to opts->min_mel_freq and opts->max_mel_freq and adjusts
+ * related CLI options to valid values given the available frequency bins.
+ * Modifies opts in-place.
+ *
+ * Specific behavior:
+ * - Returns immediately if either `opts` or `result` is NULL.
+ * - Computes start and end bin indices using `result->num_frequencies` and
+ *   `result->sample_rate`.
+ * - If the computed end index is not greater than the start index, the end
+ *   index is bumped to `start + 1` (ensures at least one bin).
+ * - If `opts->num_mel_filters` exceeds the number of available bins, it is
+ *   clamped to that bin count.
+ * - If `opts->compute_mfcc` is true and `opts->num_mfcc_coeffs` exceeds the
+ *   (possibly clamped) `opts->num_mel_filters`, it is clamped to
+ *   `opts->num_mel_filters`.
+ *
+ * Warnings are logged when any option is adjusted.
+ *
+ * @param opts CLI options structure; Mel/MFCC fields may be modified.
+ * @param result STFT result used to derive available frequency bins.
+ */
 static void finalize_settings(cli_options_t *opts, stft_t *result) {
     if (!opts || !result) return;
 
@@ -36,6 +61,37 @@ static void finalize_settings(cli_options_t *opts, stft_t *result) {
 
 
 
+/**
+ * Program entry point for the CLI audio visualization pipeline.
+ *
+ * Parses CLI options, loads and auto-detects input audio, computes an STFT
+ * (optionally computing a Mel spectrogram and MFCCs), generates PNG plots
+ * for STFT / Mel / MFCC as requested, prints benchmarking information, and
+ * performs cleanup.
+ *
+ * Detailed behavior:
+ * - Reads command-line options and auto-detects audio properties from the
+ *   specified input file.
+ * - Validates options; if validation fails, logs an error and exits normally.
+ * - When valid: prepares windowing data and an FFT plan, runs the STFT,
+ *   finalizes audio-dependent option values (e.g., Mel/MFCC frequency/bin
+ *   bounds and filter counts), and computes bounds for slicing the STFT.
+ * - Copies the bounded magnitude data, plots the STFT to "<output_base>_stft.png".
+ * - If enabled, builds a filterbank and:
+ *     - Computes and plots a Mel spectrogram to "<output_base>_mel.png".
+ *     - Computes MFCCs and plots them to "<output_base>_mfcc.png".
+ * - Prints timing/benchmark results and frees all allocated resources before exit.
+ *
+ * Side effects:
+ * - Reads input audio from disk, creates output PNG files, and logs to stdout/stderr.
+ * - Allocates heap memory for intermediate buffers and frees them prior to return.
+ *
+ * Arguments:
+ * - argc, argv: standard C program arguments used by the CLI parser.
+ *
+ * Return:
+ * - Always returns 0.
+ */
 int main(int argc, char *argv[]) {
     cli_options_t opts;
     parse_cli(argc, argv, &opts);

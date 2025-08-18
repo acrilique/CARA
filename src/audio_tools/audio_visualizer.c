@@ -1,28 +1,16 @@
 #include "audio_tools/audio_visualizer.h"
 #include "utils/bench.h"  // Add this include for logging macros
 
-/*
- * The MIT License (MIT)
- * 
- * Copyright © 2025 Devadut S Balan
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+/**
+ * Convert a magnitude to either linear or a compact dB-like value.
+ *
+ * If `db` is false, returns the input magnitude unchanged. If `db` is true,
+ * returns a bounded dB-like measure computed as log10(1 + mag^2), which
+ * emphasizes larger magnitudes while remaining finite for mag = 0.
+ *
+ * @param mag Linear magnitude value.
+ * @param db If true, return the dB-like transformed value; if false, return `mag`.
+ * @return The original magnitude or its dB-like transformation.
  */
 
 
@@ -30,6 +18,14 @@ inline float brachless_db(float mag, bool db) {
     return !db * mag + db * log10f(1 + mag * mag);
 }
 
+/**
+ * Log the current time and frequency bounds from a bounds2d_t.
+ *
+ * Prints both the floating-point ("f") and discrete/index ("d") start and end
+ * values for time and frequency to the application's logging facility.
+ *
+ * @param bounds Pointer to the bounds2d_t whose fields will be read and logged.
+ */
 void print_bounds(bounds2d_t *bounds) {
     LOG("Time bounds:");
     LOG("  Start (f): %.2f", bounds->time.start_f);
@@ -44,10 +40,31 @@ void print_bounds(bounds2d_t *bounds) {
     LOG("  End   (d): %zu", bounds->freq.end_d);
 }
 
+/**
+ * Update the time upper bound of a bounds2d_t.
+ *
+ * Sets bounds->time.end_d to max_time. The max_freq parameter is unused and retained for API compatibility.
+ *
+ * @param bounds Bounds structure to modify.
+ * @param max_freq Unused.
+ * @param max_time New time upper bound to assign to bounds->time.end_d.
+ */
 void set_limits(bounds2d_t *bounds, const size_t max_freq, const size_t max_time) {
     bounds->time.end_d = max_time;
 }
 
+/**
+ * Initialize 2D bounds' digital indices from an STFT result.
+ *
+ * Converts the frequency bounds' floating-point Hz values in `bounds->freq`
+ * to discrete bin indices using the STFT's number of frequency bins and
+ * sample rate, and sets the time start index to zero.
+ *
+ * @param bounds Pointer to bounds2d_t whose `time.start_d`, `freq.start_d`
+ *               and `freq.end_d` fields will be updated.
+ * @param result STFT metadata (provides `num_frequencies` and `sample_rate`)
+ *               used to map Hz values to frequency bin indices.
+ */
 void init_bounds(bounds2d_t *bounds, stft_t *result) {
     bounds->time.start_d = 0;
 
@@ -55,6 +72,19 @@ void init_bounds(bounds2d_t *bounds, stft_t *result) {
     bounds->freq.end_d = hz_to_index(result->num_frequencies, result->sample_rate, bounds->freq.end_f);
 }
 
+/**
+ * Copy a bounded rectangular block of magnitude values into a contiguous output buffer.
+ *
+ * Copies the frequency range [bounds->freq.start_d, bounds->freq.end_d) for each time
+ * index in [bounds->time.start_d, bounds->time.end_d) from the source matrix `mags`
+ * into the destination buffer `data` as contiguous rows.
+ *
+ * @param data Destination buffer; must be large enough to hold
+ *             (bounds->time.end_d - bounds->time.start_d) * (bounds->freq.end_d - bounds->freq.start_d) floats.
+ * @param mags Source magnitude matrix laid out row-major by time, with `length` floats per time row.
+ * @param bounds Specifies the time and frequency start/end indices to copy (end indices are exclusive).
+ * @param length Number of frequency bins (columns) in each time row of `mags`.
+ */
 void fast_copy(float *data, float *mags, bounds2d_t *bounds, const size_t length) {
     const size_t freq_range = bounds->freq.end_d - bounds->freq.start_d;
     const size_t copy_size = freq_range * sizeof(float);
@@ -64,6 +94,29 @@ void fast_copy(float *data, float *mags, bounds2d_t *bounds, const size_t length
     }
 }
 
+/**
+ * Render a 2D spectrogram-like heatmap from `data` and write it to a file.
+ *
+ * Creates an internal heatmap of size `settings->w` x `settings->h`, maps the
+ * rectangular region specified by `bounds->time` and the full vertical range
+ * (height `h`) onto the heatmap, converts each sample with `brachless_db`
+ * when `settings->db` is true, and accumulates points into the heatmap.
+ * Frequency rows are vertically flipped so that lower frequencies appear at
+ * the bottom of the image (index `h - f - 1`). The resulting heatmap is
+ * saved to `settings->output_file`.
+ *
+ * If allocation of the heatmap fails, an error is logged and the function
+ * returns without writing a file.
+ *
+ * @param data      Pointer to a contiguous buffer of size at least
+ *                  (bounds->time.end_d - bounds->time.start_d) * settings->h,
+ *                  laid out as time-major frames each containing `h` frequency
+ *                  bins.
+ * @param bounds    Time/frequency bounds describing the time range to render;
+ *                  only `bounds->time.start_d` and `bounds->time.end_d` are
+ *                  used for the horizontal extent.
+ * @param settings  Plot settings (width `w`, height `h`, `db` flag, output
+ *                  filename, background color and color scheme).
 inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
     const size_t w = settings->w;
     const size_t h = settings->h;
@@ -90,6 +143,26 @@ inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
     save_heatmap(&hm, settings->output_file, w, h, settings->bg_color, settings->cs_enum);
 }
 
+/**
+ * Apply a mel filter bank to a block of spectral frames and produce mel-band values.
+ *
+ * For each time frame within bounds->time.{start_d,end_d}, this function computes the
+ * dot product between the frame's frequency bins (restricted to the frequency bounds)
+ * and each mel filter, optionally converts the filter response to a dB-like value, and
+ * stores results in a newly allocated array of size (tend - tstart) * num_filters.
+ *
+ * @param cont_mem   Pointer to contiguous spectral magnitude data arranged by time frames.
+ *                   Only the slice defined by bounds->time and bounds->freq is read.
+ * @param num_filters Number of mel filters (width of the filter bank, number of outputs per frame).
+ * @param num_freq   Total number of frequency bins per filter row in mel_filter_bank (stride).
+ * @param mel_filter_bank Flattened filter bank array of length num_filters * num_freq,
+ *                       laid out row-major (filter index major).
+ * @param bounds     Time and frequency bounds specifying the region to process.
+ * @param settings   Plot/settings structure; only settings->db is used to select linear vs dB-like output.
+ *
+ * @return Pointer to an allocated float array of length (time_frames * num_filters) on success,
+ *         or NULL on allocation failure. The caller is responsible for freeing the returned buffer.
+ */
 float *apply_filter_bank(float *cont_mem, size_t num_filters, size_t num_freq, float *mel_filter_bank, bounds2d_t *bounds, plot_t *settings) {
     const bool   db     = settings->db;
     const size_t tstart = bounds->time.start_d;
@@ -117,6 +190,29 @@ float *apply_filter_bank(float *cont_mem, size_t num_filters, size_t num_freq, f
     return mel_values;
 }
 
+/**
+ * Compute a filtered cosine transform (FCC) over time frames.
+ *
+ * Applies the provided DCT-like coefficient matrix to per-frame mel-band values to
+ * produce time-aligned FCC (cepstral) coefficients. Each output frame contains
+ * `dft_coff->num_coff` coefficients computed as the dot product between the
+ * corresponding row of `dft_coff->coeffs` and the mel values for that frame;
+ * results are converted with `brachless_db` when `settings->db` is true.
+ *
+ * @param mel_values Pointer to input mel values laid out as contiguous frames:
+ *                   frame 0 bands[0..num_filters-1], frame 1, ... . Expected length
+ *                   >= (bounds->time.end_d - bounds->time.start_d) * dft_coff->num_filters.
+ * @param dft_coff   Pointer to a dct_t containing `num_filters` and `num_coff`
+ *                   and a coeffs array of size (num_coff * num_filters).
+ * @param bounds     Time/frequency bounds; only the time range (time.start_d..time.end_d)
+ *                   is used to determine the number of frames processed.
+ * @param settings   Runtime settings; only `settings->db` is observed to decide
+ *                   whether to convert outputs with a dB-like transform.
+ *
+ * @return Pointer to a newly allocated array of size (num_coff * number_of_frames)
+ *         containing FCC coefficients in frame-major order, or NULL if memory
+ *         allocation fails. Caller is responsible for freeing the returned buffer.
+ */
 float *FCC(float *mel_values, dct_t *dft_coff, bounds2d_t *bounds, plot_t *settings) {
     const bool   db      = settings->db;
     const size_t tstart  = bounds->time.start_d;
@@ -146,6 +242,20 @@ float *FCC(float *mel_values, dct_t *dft_coff, bounds2d_t *bounds, plot_t *setti
     return fcc_values;
 }
 
+/**
+ * Generate DCT-like cosine coefficients for a filter bank.
+ *
+ * Produces a dct_t containing a newly-allocated coefficient array of length
+ * num_filters * num_coff. Coefficients are laid out with coefficient index
+ * varying slower: coeffs[n * num_filters + mel].
+ *
+ * @param num_filters Number of mel/filter bands (width of each coefficient vector).
+ * @param num_coff    Number of output coefficients per filter (number of DCT terms).
+ * @return A dct_t whose `coeffs` points to a malloc'd array on success. On
+ *         allocation failure `coeffs` will be NULL (an error is logged). The
+ *         caller is responsible for freeing the returned `coeffs` when no
+ *         longer needed.
+ */
 dct_t gen_cosine_coeffs(const size_t num_filters, const size_t num_coff) {
     dct_t dft_coff = {
         .num_filters = num_filters,
