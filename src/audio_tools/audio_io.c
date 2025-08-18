@@ -1,6 +1,6 @@
-#include "../../headers/audio_tools/audio_io.h"
-#include "../../headers/audio_tools/minimp3.h"
-#include "../../headers/utils/bench.h"
+#include "audio_tools/audio_io.h"
+#include "audio_tools/minimp3.h"
+#include "utils/bench.h"
 
 /*
  * The MIT License (MIT)
@@ -8,7 +8,7 @@
  * Copyright © 2025 Devadut S Balan
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the “Software”), to deal
+ * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
@@ -17,7 +17,7 @@
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
  * 
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -29,17 +29,17 @@
 
 float print_ad(audio_data *data) {
     if (!data || !data->samples) {
-        printf("{\"error\": \"Invalid audio data\"}\n");
+        ERROR("Invalid audio data");
         return 0.0f;
     }
     
-    float duration = (float)data->num_samples / ((float)(data->sample_rate * data->channels));
+    const float duration = (float)data->num_samples / ((float)(data->sample_rate * data->channels));
     
-    printf("duration:%.3f\n",       duration);
-    printf("channels:%zu\n",        data->channels);
-    printf("num_samples:%zu\n",     data->num_samples);
-    printf("sample_rate:%.4f\n",    data->sample_rate);
-    printf("file_size_bytes:%ld\n", data->file_size);
+    LOG("duration:%.3f", duration);
+    LOG("channels:%zu", data->channels);
+    LOG("num_samples:%zu", data->num_samples);
+    LOG("sample_rate:%.4f", data->sample_rate);
+    LOG("file_size_bytes:%ld", data->file_size);
 
     return duration;
 }
@@ -58,13 +58,13 @@ file_buffer read_file(const char *filename) {
 
     FILE *fin = fopen(filename, "rb");
     if (!fin) {
-        fprintf(stderr, "Error: Failed to open file '%s'\n", filename);
+        ERROR("Failed to open file '%s'", filename);
         return result;
     }
 
     struct stat st;
     if (fstat(fileno(fin), &st) != 0) {
-        fprintf(stderr, "Error: fstat failed for file '%s'\n", filename);
+        ERROR("fstat failed for file '%s'", filename);
         fclose(fin);
         return result;
     }
@@ -72,13 +72,13 @@ file_buffer read_file(const char *filename) {
     result.size = (uint64_t)st.st_size;
     result.data = (uint8_t *)malloc(result.size);
     if (!result.data) {
-        fprintf(stderr, "Error: Memory allocation failed for file '%s' (%lu bytes)\n", filename, result.size);
+        ERROR("Memory allocation failed for file '%s' (%lu bytes)", filename, result.size);
         fclose(fin);
         return result;
     }
 
     if (fread(result.data, 1, result.size, fin) != result.size) {
-        fprintf(stderr, "Error: fread failed for file '%s'\n", filename);
+        ERROR("fread failed for file '%s'", filename);
         free(result.data);
         result.data = NULL;
         result.size = 0;
@@ -97,7 +97,7 @@ audio_data read_wav(const char *filename, long file_size) {
 
     file = sf_open(filename, SFM_READ, &sf_info);
     if (!file) {
-        fprintf(stderr, "Error opening file\n");
+        ERROR("Error opening file");
         return audio;
     }
 
@@ -105,14 +105,14 @@ audio_data read_wav(const char *filename, long file_size) {
     audio.samples = (float*)malloc(audio.num_samples * sizeof(float));
 
     if (!audio.samples) {
-        fprintf(stderr, "Memory allocation failed\n");
+        ERROR("Memory allocation failed");
         sf_close(file);
         return audio;
     }
 
     sf_count_t frames_read = sf_readf_float(file, audio.samples, sf_info.frames);
     if (frames_read < sf_info.frames) {
-        fprintf(stderr, "Error reading audio data: read %lld of %lld frames\n", 
+        WARN("Error reading audio data: read %lld of %lld frames", 
                 (long long)frames_read, (long long)sf_info.frames);
         audio.num_samples = (size_t)frames_read * sf_info.channels;
     }
@@ -132,12 +132,11 @@ frames find_mp3_frame_offsets(file_buffer *buf) {
     int free_format_bytes = 0;
     int frame_bytes = 0;
 
-  
-    int max_frames = buf->size / WORST_CASE_FRAME_SIZE;   // seee audio_io.h line 5
+    const int max_frames = buf->size / WORST_CASE_FRAME_SIZE;   // see audio_io.h line 5
 
     result.data = (unsigned short *)malloc(max_frames * sizeof(unsigned short));
     if (!result.data) {
-        fprintf(stderr, "Memory allocation failed for %d frames\n", max_frames);
+        ERROR("Memory allocation failed for %d frames", max_frames);
         return result;
     }
 
@@ -150,7 +149,7 @@ frames find_mp3_frame_offsets(file_buffer *buf) {
         if (frame_bytes == 0 || next_offset < 0)
             break;
 
-        int total_advance = next_offset + frame_bytes;
+        const int total_advance = next_offset + frame_bytes;
 
         result.data[frame_index++] = (unsigned short)total_advance;
         total_bytes += total_advance;
@@ -165,7 +164,6 @@ frames find_mp3_frame_offsets(file_buffer *buf) {
 }
 
 
-
 audio_data read_mp3(const char *filename, long file_size) {
     audio_data audio = {0};
     audio.file_size = file_size;
@@ -178,7 +176,7 @@ audio_data read_mp3(const char *filename, long file_size) {
     END_TIMING("file_read");
 
     if (!buf.data || buf.size == 0) {
-        fprintf(stderr, "Failed to read input file: %s\n", filename);
+        ERROR("Failed to read input file: %s", filename);
         return audio;
     }
 
@@ -186,17 +184,16 @@ audio_data read_mp3(const char *filename, long file_size) {
     frames f = find_mp3_frame_offsets(&buf);
     END_TIMING("frame_scan");
 
-    printf("Total frames: %d\n", f.count);
-    printf("Average frame size: %.2f bytes\n", f.avg_byte_per_frame);
-
+    LOG("Total frames: %d", f.count);
+    LOG("Average frame size: %.2f bytes", f.avg_byte_per_frame);
 
     // Estimate max PCM samples (safe upper bound at 32kbps)
-    size_t max_pcm_samples = (buf.size * MINIMP3_MAX_SAMPLES_PER_FRAME) / 32;
-    size_t pcm_bsiz        = max_pcm_samples * sizeof(PARAM_DATATYPE) * 2;
+    const size_t max_pcm_samples = (buf.size * MINIMP3_MAX_SAMPLES_PER_FRAME) / 32;
+    const size_t pcm_bsiz        = max_pcm_samples * sizeof(PARAM_DATATYPE) * 2;
 
     audio.samples = malloc(pcm_bsiz);
     if (!audio.samples) {
-        fprintf(stderr, "Memory allocation failed\n");
+        ERROR("Memory allocation failed");
         free(buf.data);
         free(f.data);
         return audio;
@@ -205,8 +202,8 @@ audio_data read_mp3(const char *filename, long file_size) {
     PARAM_DATATYPE *full_pcm = (PARAM_DATATYPE *)audio.samples;
     uint64_t decoded_samples = 0;
 
-    uint8_t *input_ptr = buf.data;
-    int remaining_size = buf.size;
+    uint8_t *input_ptr     = buf.data;
+    int      remaining_size = buf.size;
 
     START_TIMING();
     while (remaining_size > 0) {
@@ -220,11 +217,11 @@ audio_data read_mp3(const char *filename, long file_size) {
 
         if (samples > 0) {
             if ((decoded_samples + samples) * info.channels > max_pcm_samples) {
-                fprintf(stderr, "PCM buffer overflow prevented\n");
+                ERROR("PCM buffer overflow prevented");
                 break;
             }
 
-            size_t copy_size = samples * sizeof(PARAM_DATATYPE) * info.channels;
+            const size_t copy_size = samples * sizeof(PARAM_DATATYPE) * info.channels;
             memcpy(full_pcm + (decoded_samples * info.channels), pcm, copy_size);
             decoded_samples += samples;
 
@@ -246,8 +243,6 @@ audio_data read_mp3(const char *filename, long file_size) {
 }
 
 
-
-
 audio_data auto_detect(const char *filename) {
     audio_data audio = {0};
     
@@ -264,7 +259,7 @@ audio_data auto_detect(const char *filename) {
             audio = read_mp3(filename, audio.file_size);
             break;
         default:
-            fprintf(stderr, "Unknown or unsupported audio format\n");
+            ERROR("Unknown or unsupported audio format");
             break;
     }
     

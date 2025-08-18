@@ -3,11 +3,14 @@
 
     #include <omp.h>
 
-    #include "audio_io.h"
-    #include "../libheatmap/heatmap_tools.h"
-    #include "spectral_features.h"
+    #ifndef M_PI
+        #define M_PI 3.14159265358979323846
+    #endif
 
-    /**
+    #include "audio_io.h"
+    #include "libheatmap/heatmap_tools.h"
+
+     /**
      * @brief Frequency/time bound range
      */
     typedef struct {
@@ -41,11 +44,15 @@
      * @brief DCT coefficient structure
      */
     typedef struct {
-        float *coeffs;            /**< Cosine coefficients */
-        const size_t num_filters; /**< Number of Mel filters */
-        const size_t num_coff;    /**< Number of DCT coeffs */
+        float *coeffs;      /**< Cosine coefficients */
+        size_t num_filters; /**< Number of Mel filters */
+        size_t num_coff;    /**< Number of DCT coeffs */
     } dct_t;
 
+
+    #include "spectral_features.h"
+
+   
     /**
      * @brief Print the bounds for debugging
      * @param bounds Pointer to bounds2d_t
@@ -63,9 +70,9 @@
     /**
      * @brief Initialize bounds using STFT result
      * @param bounds Pointer to bounds2d_t
-     * @param result Pointer to stft_d
+     * @param result Pointer to stft_t
      */
-    void init_bounds(bounds2d_t *bounds, stft_d *result);
+    void init_bounds(bounds2d_t *bounds, stft_t *result);
 
     /**
      * @brief Copy a subregion from data to mags based on bounds

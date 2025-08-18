@@ -1,4 +1,4 @@
-#include "../../headers/libheatmap/heatmap_tools.h"
+#include "libheatmap/heatmap_tools.h"
 
 int save_heatmap(heatmap_t **hm,char *output_file,size_t w,size_t h,unsigned char bg_clr[4],int cs_enum){
 

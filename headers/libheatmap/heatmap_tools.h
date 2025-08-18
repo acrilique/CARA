@@ -5,7 +5,7 @@
     #include <string.h>
 
     #include "heatmap.h"
-    #include "../png_tools/png_tools.h"
+    #include "png_tools/png_tools.h"
     
 
     #ifdef BUILTIN

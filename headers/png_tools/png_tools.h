@@ -5,7 +5,7 @@
     #include <stdlib.h>
     #include <stdio.h>
     #include <png.h>
-    #include "../libheatmap/heatmap.h"
+    #include "libheatmap/heatmap.h"
     #include <math.h>
     #include <string.h>
 
