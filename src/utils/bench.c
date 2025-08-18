@@ -26,18 +26,47 @@
 
 benchmark_t benchmarks;
 
+/**
+ * Initialize global benchmark state.
+ *
+ * Resets the global `benchmarks` structure counters used by the benchmarking
+ * utility: sets total_time, timing_index, and start_time to zero so timing can
+ * begin from a clean state.
+ */
 void benchmark_init() {
     benchmarks.total_time   = 0;   
     benchmarks.timing_index = 0; 
     benchmarks.start_time   = 0;
 }
 
+/**
+ * Return a monotonic timestamp in microseconds.
+ *
+ * Uses clock_gettime(CLOCK_MONOTONIC) and converts the result to microseconds
+ * (seconds * 1,000,000 + nanoseconds / 1,000). The value is suitable for
+ * measuring elapsed intervals but is not tied to the wall-clock calendar time.
+ *
+ * @return Monotonic time in microseconds as a signed 64-bit integer.
+ */
 long long get_time_us() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (long long)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+/**
+ * Record the elapsed time (since benchmarks.start_time) for a named function.
+ *
+ * Computes the current monotonic time, stores the elapsed microseconds and the
+ * provided function name into the next slot of the global `benchmarks` object,
+ * adds the elapsed time to `benchmarks.total_time`, and advances
+ * `benchmarks.timing_index`.
+ *
+ * If the maximum number of benchmark entries (MAX_FUNS_TO_BENCH) has been
+ * reached, logs an error via ERROR(...) and returns without modifying state.
+ *
+ * @param function_name Name of the function being recorded; copied into the
+ *                      benchmark entry and nul-terminated. */
 void record_timing(const char *function_name) {
     if (benchmarks.timing_index >= MAX_FUNS_TO_BENCH) {
         ERROR("Exceeded maximum number of benchmarked functions");
@@ -58,6 +87,16 @@ void record_timing(const char *function_name) {
     benchmarks.timing_index++;
 }
 
+/**
+ * Select an appropriate scale for the given numeric value.
+ *
+ * Determines which predefined scale yields an absolute scaled value >= 1.0 by
+ * testing scales from largest to smallest. If `v` is 0.0 or no scale
+ * satisfies the criterion, the function returns the `NANO` scale.
+ *
+ * @param v Value in the base unit to be scaled.
+ * @return scale The selected scale entry (contains factor and suffix) suitable
+ *         for formatting `v`. */
 scale get_scale(double v) {
     if (v == 0.0) {
         return scales[NANO]; 
@@ -71,12 +110,35 @@ scale get_scale(double v) {
     return scales[NANO]; 
 }
 
+/**
+ * Format a numeric value into a human-readable string with an appropriate SI scale and unit.
+ *
+ * Determines an appropriate scale (e.g., k, M, μ, etc.) for 'val', scales the value, and writes
+ * a formatted string of the form "<scaled> <suffix><unit>" into 'buffer'.
+ *
+ * @param val     Numeric value to format.
+ * @param buffer  Destination buffer for the formatted string (will be null-terminated if buf_size > 0).
+ * @param buf_size Size of 'buffer' in bytes; output will be truncated if it does not fit.
+ * @param unit    Unit string appended after the scale suffix (e.g., "s", "B").
+ */
 void format_scaled(double val, char *buffer, size_t buf_size, const char *unit) {
     const scale  s      = get_scale(val);
     const double scaled = val / s.factor;
     snprintf(buffer, buf_size, "%7.3f %s%s", scaled, s.suffix, unit);
 }
 
+/**
+ * Estimate FFT performance in GFLOPS for a single run.
+ *
+ * Given an elapsed time in microseconds and an FFT size, returns the estimated
+ * gigaflops (GFLOPS) using the common FFT FLOP count approximation:
+ * FLOPs ≈ 5 * N * log2(N). If mu_s <= 0.0 the function returns 0.0.
+ *
+ * @param mu_s Elapsed time of the FFT run in microseconds.
+ * @param FFT_size Number of points in the FFT (N).
+ * @param log Unused; accepted for API compatibility and ignored by this function.
+ * @return Estimated performance in GFLOPS (double).
+ */
 double FFT_bench(double mu_s, unsigned int FFT_size, bool log) {
     if (mu_s <= 0.0)
         return 0.0;
@@ -90,10 +152,32 @@ double FFT_bench(double mu_s, unsigned int FFT_size, bool log) {
     return gflops;
 }
 
+/**
+ * Compare two time_info entries for descending sort by elapsed microseconds.
+ *
+ * Interprets `a` and `b` as `time_info*` and compares their `time_us` fields.
+ * Designed for use with qsort to order entries from largest to smallest `time_us`.
+ *
+ * @param a Pointer to the first `time_info`.
+ * @param b Pointer to the second `time_info`.
+ * @return Negative if `b->time_us` < `a->time_us`, zero if equal, positive if `b->time_us` > `a->time_us`.
+ */
 int compare_times(const void *a, const void *b) {
     return ((time_info*)b)->time_us - ((time_info*)a)->time_us;
 }
 
+/**
+ * Map a percentage value to an ANSI color code string for gradient display.
+ *
+ * Returns a color constant representing a heat-map grade for the provided
+ * percentage (expected in the 0–100 range). Thresholds are inclusive at the
+ * upper bounds shown (e.g., 80.0 and above => BRIGHT_RED) and the lowest
+ * nonzero range (>0.1) maps to GREEN; values <= 0.1 return BLUE.
+ *
+ * @param percentage Percentage value to evaluate (0.0–100.0).
+ * @return Pointer to a null-terminated string constant representing the
+ *         chosen color code (e.g., BRIGHT_RED, RED, MAGENTA, ...).
+ */
 const char* get_gradient_color(double percentage) {
     if (percentage >= 80.0) return BRIGHT_RED;   
     if (percentage >= 60.0) return RED;
@@ -105,6 +189,23 @@ const char* get_gradient_color(double percentage) {
     return BLUE;  
 }
 
+/**
+ * Print a ranked, colored table of recorded benchmark timings to stderr.
+ *
+ * Sorts the global `benchmarks.timings` by elapsed time (descending) and emits
+ * a human-readable, colorized table showing each function's name, scaled
+ * execution time, and percentage of total runtime, followed by a simple
+ * ASCII bar visualization. If no timings are recorded, a warning is issued
+ * and nothing is printed.
+ *
+ * Side effects:
+ * - Writes formatted output to stderr.
+ * - Reorders `benchmarks.timings` in-place via qsort.
+ *
+ * Notes:
+ * - Times are formatted using the utility `format_scaled` (seconds shown).
+ * - Color output relies on the terminal escape sequences defined in this file.
+ */
 void print_bench_ranked() {
     if (benchmarks.timing_index == 0) {
         WARN("No benchmark data available");
@@ -144,6 +245,17 @@ void print_bench_ranked() {
     fprintf(stderr, "%s---------------------------------------------------------\n%s", BRIGHT_CYAN, RESET);
 }
 
+/**
+ * Print recorded benchmark entries as a JSON-like object to stdout.
+ *
+ * Outputs each recorded timing entry as a JSON key (the function name) with an
+ * object containing:
+ *   - "time_μs": elapsed time in microseconds (integer)
+ *   - "percentage": percentage of the total recorded time (floating-point)
+ *
+ * The entire block is delimited with the markers ">>>{" and "}<<<". Entries are
+ * comma-separated except for the final entry.
+ */
 void print_bench_json() {
     printf(">>>{\n");
     for (size_t i = 0; i < benchmarks.timing_index; i++) {
@@ -157,6 +269,13 @@ void print_bench_json() {
     printf("}<<<\n");
 }
 
+/**
+ * Print simple benchmark entries as "function_name:time_us" lines to stdout.
+ *
+ * Iterates the global `benchmarks` entries and prints each recorded timing on its
+ * own line in the form "<function_name>:<time_us>" where `time_us` is the
+ * elapsed time in microseconds. If no entries are recorded, nothing is printed.
+ */
 void print_bench() {
     for (size_t i = 0; i < benchmarks.timing_index; i++) {
         printf("%s:%lld\n", benchmarks.timings[i].function_name, benchmarks.timings[i].time_us);

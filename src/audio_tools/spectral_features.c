@@ -31,7 +31,13 @@ unsigned int n_threads = 1;
  */
 
 /**
- * @brief Zeroth order modified Bessel function of the first kind (I₀)
+ * Compute the modified Bessel function of the first kind of order zero, I0(x).
+ *
+ * Uses a power-series expansion I0(x) = sum_{k=0..∞} (x^2/4)^k / (k!)^2 and accumulates
+ * terms until the next term is below 1e-10 times the current sum.
+ *
+ * @param x Input value.
+ * @return Approximated I0(x).
  */
 static double bessel_i0(double x) {
     double sum = 1.0;
@@ -46,14 +52,45 @@ static double bessel_i0(double x) {
     return sum;
 }
 
+/**
+ * Map a frequency in Hz to an FFT bin index.
+ *
+ * Converts a frequency `f` (Hz) to the corresponding FFT bin index given `num_freq`
+ * (number of positive-frequency bins) and the `sample_rate`. The computed value is
+ * floor((2 * num_freq * f) / sample_rate) due to the integer cast.
+ *
+ * @param num_freq Number of positive-frequency bins (typically N/2 for a real-to-complex FFT).
+ * @param sample_rate Sampling rate in Hz.
+ * @param f Frequency in Hz to convert.
+ * @return Corresponding bin index as a `size_t`.
+ */
 inline size_t hz_to_index(size_t num_freq, size_t sample_rate, float f) {
     return (size_t)((num_freq * f * 2) / sample_rate);
 }
 
+/**
+ * Check whether an integer is a non-zero power of two.
+ *
+ * @param x Integer value to test.
+ * @returns true if x is a power of two (and not zero), false otherwise.
+ */
 bool is_power_of_two(size_t x) {
     return x && ((x & (x - 1)) == 0);
 }
 
+/**
+ * Allocate aligned memory with optional zero-initialization.
+ *
+ * Allocates a block of `size` bytes aligned to `alignment` using aligned_alloc.
+ * The `alignment` must be a power of two; if not, the function returns NULL.
+ * If allocation fails, NULL is returned. When `zero_init` is true, the
+ * allocated memory is zeroed before being returned.
+ *
+ * @param alignment Byte alignment for the allocation; must be a power of two.
+ * @param size Number of bytes to allocate.
+ * @param zero_init If true, zero-initialize the allocated memory.
+ * @return Pointer to the allocated memory on success, or NULL on failure.
+ */
 void *aligned_alloc_batch(size_t alignment, size_t size, bool zero_init) {
     if (!is_power_of_two(alignment)) {
         ERROR("Alignment (%zu) must be a power of two.", alignment);
@@ -73,12 +110,28 @@ void *aligned_alloc_batch(size_t alignment, size_t size, bool zero_init) {
     return ptr;
 }
 
+/**
+ * Free memory previously allocated with aligned_alloc_batch or standard allocators.
+ *
+ * Safe to call with NULL; does nothing in that case.
+ *
+ * @param ptr Pointer to the allocated memory to free.
+ */
 void aligned_free_batch(void *ptr) {
     if (ptr) {
         free(ptr);
     }
 }
 
+/**
+ * Print STFT benchmarking statistics to the log.
+ *
+ * Prints a formatted summary of the provided stft_bench_t: average FFT time per frame,
+ * measured throughput in GFLOP/s, number of processed frames, number of threads used,
+ * and parallel efficiency. Output is sent via the LOG macro using terminal formatting.
+ *
+ * @param bench Pointer to the benchmark data to print. Must be non-NULL.
+ */
 void print_stft_bench(const stft_bench_t *bench) {
     LOG("%s%s%s", BAR_COLOR, line, RESET);
     LOG("⏱️  %sAvg FFT time per frame%s  : %s%.3f ns%s",
@@ -92,6 +145,15 @@ void print_stft_bench(const stft_bench_t *bench) {
 }
 
 
+/**
+ * Release FFTW resources held by an fft_t and reset its internal pointers.
+ *
+ * If `fft` is NULL this function does nothing. For a non-NULL `fft` it destroys
+ * the FFTW plan if present and frees the input/output buffers allocated with
+ * FFTW, setting those members to NULL to avoid dangling pointers.
+ *
+ * @param fft Pointer to the fft_t whose resources should be freed.
+ */
 void free_fft_plan(fft_t *fft) {
     if (fft) {
         if (fft->plan != NULL) {
@@ -109,6 +171,14 @@ void free_fft_plan(fft_t *fft) {
     }
 }
 
+/**
+ * Release and clear internal buffers held by an STFT result.
+ *
+ * Frees aligned phasor and magnitude buffers and the frequencies array, then
+ * sets those pointers in `result` to NULL. Safe to call with a NULL `result`
+ * (no-op).
+ *
+ * @param result Pointer to an stft_t whose internal buffers will be freed. */
 void free_stft(stft_t *result) {
     if (result) {
         aligned_free_batch(result->phasers);
@@ -122,7 +192,19 @@ void free_stft(stft_t *result) {
 
 
 
+/**
+ * Convert frequency in Hertz to the Mel scale.
+ *
+ * @param hz Frequency in Hertz.
+ * @return Corresponding value on the Mel scale.
+ */
 double hz_to_mel(double hz)       { return 2595.0 * log10(1.0 + hz / 700.0); }
+/**
+ * Convert a Mel-scale frequency value to linear frequency in Hertz.
+ *
+ * @param mel Frequency on the Mel scale.
+ * @return Corresponding frequency in Hz.
+ */
 double mel_to_hz(double mel)      { return 700.0 * (pow(10.0, mel / 2595.0) - 1.0); }
 
 double hz_to_bark(double hz)      { return 6.0 * asinh(hz / 600.0); }
@@ -141,6 +223,15 @@ double hz_to_log10(double hz)     { return log10(hz + 1.0); }
 double log10_to_hz(double val)    { return pow(10.0, val) - 1.0; }
 
 
+/**
+ * Print contents of a mel filter bank to the log.
+ *
+ * If `v` is NULL, has no weights, or `v->size` is zero, a single message is logged and the
+ * function returns. Otherwise logs the bank size and one line per filter with the filter
+ * index, corresponding frequency bin index (`v->freq_indexs[i]`), and filter weight
+ * (`v->weights[i]`).
+ *
+ * @param v Pointer to the filter bank to print. */
 void print_melbank(const filter_bank_t *v) {
     if (!v || !v->weights || v->size == 0) {
         LOG("melbank is empty or NULL.");
@@ -154,6 +245,34 @@ void print_melbank(const filter_bank_t *v) {
 }
 
 
+/**
+ * Generate a triangular filter bank in a specified frequency scale and populate the provided filter matrix.
+ *
+ * Builds `n_filters` triangular filters spanning [min_f, max_f] using the chosen perceptual/mathematical
+ * frequency scale (mel, bark, erb, chirp, cam, or log10). The function fills the caller-provided
+ * `filter` array with weights laid out as contiguous filters: filter[(m * num_bins) + k] where
+ * num_bins == fft_size/2 and m ranges 0..n_filters-1. It also returns a compact representation
+ * (`filter_bank_t`) containing the indices of non-zero FFT bins for all filters and their corresponding
+ * weights in the same order used to populate `filter`.
+ *
+ * @param type      Filter bank scale/type (F_MEL, F_BARK, F_ERB, F_CHIRP, F_CAM, F_LOG10).
+ * @param min_f     Lower frequency bound (Hz) of the filter bank passband.
+ * @param max_f     Upper frequency bound (Hz) of the filter bank passband.
+ * @param n_filters Number of triangular filters to generate.
+ * @param sr        Sample rate (Hz).
+ * @param fft_size  FFT size; only the first (fft_size/2) positive bins are used per filter.
+ * @param filter    Caller-allocated array of length (n_filters * (fft_size/2)) to receive filter weights.
+ *
+ * @return A filter_bank_t whose `freq_indexs` and `weights` arrays list all non-zero bin indices and
+ *         corresponding weights (in the order they were inserted). `size` is the number of non-zero entries
+ *         and `num_filters` equals the requested `n_filters`. On allocation or parameter errors the returned
+ *         struct will have `size == 0` and may contain NULL `freq_indexs`/`weights`.
+ *
+ * Notes:
+ * - The caller must allocate `filter` before calling and is responsible for freeing memory owned by the
+ *   returned `filter_bank_t` (freq_indexs and weights) when no longer needed.
+ * - Unknown/unsupported `type` results in an error return with no constructed filters.
+ */
 filter_bank_t gen_filterbank(filter_type_t type,
                              float min_f, float max_f,
                              size_t n_filters, float sr,
@@ -240,6 +359,24 @@ filter_bank_t gen_filterbank(filter_type_t type,
 }
 
 
+/**
+ * Initialize STFT output buffers and metadata for an stft_t result.
+ *
+ * Allocates aligned arrays for magnitudes and phasors and sets frequency/count metadata
+ * based on the provided window/hop sizes and number of samples. On failure any partially
+ * allocated buffers are freed and the function returns false.
+ *
+ * @param result Pointer to an stft_t to initialize; on success its `magnitudes`,
+ *               `phasers`, `frequencies`, `num_frequencies`, and `output_size` fields
+ *               are populated (frequencies remains NULL here and should be computed
+ *               separately).
+ * @param window_size FFT window length in samples (must be > 0 and <= num_samples).
+ * @param hop_size    Hop/stride between consecutive frames in samples (must be > 0).
+ * @param num_samples Total number of input samples used to compute the number of frames.
+ *
+ * @return true if allocation and initialization succeed; false on invalid inputs or
+ *         allocation failure.
+ */
 bool init_fft_output(stft_t *result, unsigned int window_size, unsigned int hop_size, unsigned int num_samples) {
     if (!result) {
         ERROR("Output struct is NULL.");
@@ -281,11 +418,22 @@ bool init_fft_output(stft_t *result, unsigned int window_size, unsigned int hop_
 }
 
 /**
- * @brief Generate window coefficients
+ * Fill a pre-allocated buffer with window coefficients.
  *
- * @param window_values Pointer to pre-allocated array of size `window_size`
- * @param window_size Length of the window
- * @param window_type Name of the window (e.g., "hann", "kaiser")
+ * Generates window coefficients of the requested type and stores them in
+ * `window_values[0..window_size-1]`. Supported `window_type` strings:
+ * "hann", "hamming", "blackman", "blackman-harris", "bartlett",
+ * "flattop", "gaussian", "kaiser". If `window_type` is unrecognized the
+ * function emits a warning and writes a rectangular window (all ones).
+ *
+ * Requirements:
+ * - `window_values` must point to an array with at least `window_size` elements.
+ * - `window_size` must be greater than 1 (several window formulas divide by
+ *   `window_size - 1`).
+ *
+ * @param window_values Buffer to receive the window coefficients (floats).
+ * @param window_size Number of coefficients to generate (must be > 1).
+ * @param window_type NULL-terminated name of the desired window type.
  */
 void window_function(float *window_values, size_t window_size, const char *window_type) {
     const double N = (double)window_size;
@@ -336,6 +484,18 @@ void window_function(float *window_values, size_t window_size, const char *windo
     }
 }
 
+/**
+ * Compute and store FFT bin center frequencies for the positive half of the spectrum.
+ *
+ * Allocates and fills result->frequencies with (window_size/2) entries where
+ * frequencies[i] = i * (sample_rate / window_size). The array is heap-allocated
+ * and the caller takes ownership (free with free_stft or aligned_free_batch as appropriate).
+ * If allocation fails, result->frequencies remains NULL and an error is logged.
+ *
+ * @param result Pointer to the stft_t whose `frequencies` field will be set.
+ * @param window_size FFT window size; only the positive half (window_size/2) is generated.
+ * @param sample_rate Sample rate in Hz used to convert bin indices to frequencies.
+ */
 void calculate_frequencies(stft_t *result, size_t window_size, float sample_rate) {
     size_t half_window_size = window_size / 2;
     float scale = sample_rate / window_size;
@@ -349,6 +509,20 @@ void calculate_frequencies(stft_t *result, size_t window_size, float sample_rate
     }
 }
 
+/**
+ * Initialize an FFTW real-to-complex plan and allocate aligned I/O buffers.
+ *
+ * Attempts to load FFTW "wisdom" from a file named "<cache_dir>/<window_size>.wisdom" to create
+ * an optimized plan. If wisdom is unavailable or fails to import, creates a measured plan and
+ * attempts to save wisdom back to the same file. Allocates input (float[]) of length `window_size`
+ * and output (fftwf_complex[]) of length `window_size/2 + 1`.
+ *
+ * @param window_size Length of the real input frame (number of samples / FFT size).
+ * @param cache_dir Directory path used to read/write FFTW wisdom files (must be non-NULL and reasonably short).
+ * @return An initialized fft_t structure containing allocated `in` and `out` buffers and `plan` on success.
+ *         On failure (invalid input, allocation failure, or plan creation failure) returns a zeroed fft_t
+ *         with NULL pointers for `in`, `out`, and `plan`.
+ */
 fft_t init_fftw_plan(const size_t window_size, const char *cache_dir) {
     fft_t fft = {0};
     if (!cache_dir || strlen(cache_dir) > 200) {
@@ -400,6 +574,30 @@ fft_t init_fftw_plan(const size_t window_size, const char *cache_dir) {
     return fft;
 }
 
+/**
+ * Compute the Short-Time Fourier Transform (STFT) of an audio buffer.
+ *
+ * Processes `audio->samples` into an stft_t containing phasors, magnitudes,
+ * frequency bins, and timing/benchmark information. The function supports
+ * single-threaded execution (uses `master_fft`) and a multi-threaded path
+ * when the global `n_threads` > 1 (allocates per-thread FFT buffers and plans).
+ *
+ * On error (invalid input or allocation/initialization failure) a zero-initialized
+ * stft_t is returned.
+ *
+ * @param audio Pointer to input audio_data (must contain valid samples, sample_rate,
+ *              num_samples and channels = 1 or 2). Channels will be converted to mono
+ *              by copying (1) or averaging stereo pairs (2).
+ * @param window_size Number of samples in each analysis window (FFT length).
+ * @param hop_size Number of samples between successive frames (hop/stride).
+ * @param window_values Pointer to an array of `window_size` window coefficients.
+ * @param master_fft Pointer to a prepared fft_t providing a master FFT plan and
+ *                   optional wisdom; used directly in the single-threaded path and
+ *                   consulted when creating per-thread plans in the multi-threaded path.
+ *
+ * @return A populated stft_t on success (contains `phasers`, `magnitudes`, `frequencies`
+ *         and `benchmark` fields). On failure a zero-initialized stft_t is returned.
+ */
 stft_t stft(audio_data *audio, size_t window_size, size_t hop_size, float *window_values, fft_t *master_fft) {
     stft_t result = {0};
     

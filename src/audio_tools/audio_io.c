@@ -2,28 +2,18 @@
 #include "audio_tools/minimp3.h"
 #include "utils/bench.h"
 
-/*
- * The MIT License (MIT)
- * 
- * Copyright © 2025 Devadut S Balan
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+/**
+ * Print summary metadata for an audio_data object and return its duration in seconds.
+ *
+ * If `data` is NULL or has no samples, this function logs an error and returns 0.0.
+ * Otherwise it computes duration as num_samples / (sample_rate * channels),
+ * logs duration, channel count, sample count, sample rate, and file size, and
+ * returns the computed duration.
+ *
+ * @param data Pointer to a populated audio_data structure. Must have valid
+ *             `.samples`, `.num_samples`, `.sample_rate`, and `.channels` for
+ *             meaningful results.
+ * @return Duration of the audio in seconds, or 0.0 on invalid input.
  */
 
 
@@ -53,6 +43,18 @@ void free_audio(audio_data *audio) {
     }
 }
 
+/**
+ * Read an entire file into memory.
+ *
+ * Returns a file_buffer whose `data` points to a newly allocated buffer containing
+ * the file contents and whose `size` is the number of bytes read. On any error
+ * (open, fstat, allocation, or read failure) returns a file_buffer with `data`
+ * == NULL and `size` == 0.
+ *
+ * The caller is responsible for freeing `data` when no longer needed.
+ *
+ * @return file_buffer populated with file data and size, or {NULL, 0} on error.
+ */
 file_buffer read_file(const char *filename) {
     file_buffer result = {.data = NULL, .size = 0};
 
@@ -88,6 +90,22 @@ file_buffer read_file(const char *filename) {
     return result;
 }
 
+/**
+ * Read a WAV file and decode it into an audio_data structure.
+ *
+ * Opens the WAV file via libsndfile, allocates a float buffer for PCM samples,
+ * and fills audio.num_samples, audio.samples, audio.sample_rate, and audio.channels.
+ * If the full number of frames cannot be read, num_samples is adjusted to the
+ * number of frames actually read. The provided file_size is stored in
+ * audio.file_size but is not used for decoding.
+ *
+ * @param filename Path to the WAV file to read.
+ * @param file_size Size of the file in bytes; stored in the returned audio_data.
+ * @return An audio_data value. On success, `samples` points to a malloc'd
+ *         float buffer of interleaved PCM samples and `num_samples` reflects
+ *         the total sample count (frames * channels). On failure, `samples`
+ *         is NULL and `num_samples` is zero.
+ */
 audio_data read_wav(const char *filename, long file_size) {
     audio_data audio = {0};
     audio.file_size = file_size;
@@ -125,6 +143,24 @@ audio_data read_wav(const char *filename, long file_size) {
 }
 
 
+/**
+ * Scan an in-memory MP3 file buffer and record the byte offsets of successive MP3 frames.
+ *
+ * This function walks the provided buffer, locating MP3 frames using mp3d_find_frame and
+ * recording the advance (bytes consumed for each frame) into a newly allocated array.
+ * The returned frames structure contains the array of per-frame byte advances, the number
+ * of frames found, and the average bytes per frame (0.0 if no frames found).
+ *
+ * The function allocates memory for the returned frames.data; the caller is responsible
+ * for freeing that buffer when no longer needed. On allocation failure the returned
+ * frames.data will be NULL and frames.count will be 0.
+ *
+ * @param buf Pointer to a file_buffer containing MP3 data; must be non-NULL and have a valid size.
+ * @return A frames struct with:
+ *   - data: dynamically allocated array of unsigned short entries (per-frame byte advances) or NULL on allocation failure,
+ *   - count: number of frames discovered,
+ *   - avg_byte_per_frame: average bytes per frame (0.0 if count is 0).
+ */
 frames find_mp3_frame_offsets(file_buffer *buf) {
     frames result = {.data = NULL, .count = 0, .avg_byte_per_frame = 0.0f};
 
@@ -164,6 +200,24 @@ frames find_mp3_frame_offsets(file_buffer *buf) {
 }
 
 
+/**
+ * Decode an MP3 file into PCM samples and return as an audio_data structure.
+ *
+ * Reads the file at `filename`, decodes MP3 frames using the bundled minimp3
+ * decoder and allocates a heap buffer for interleaved PCM samples. The
+ * returned audio_data contains populated fields: `samples` (heap-allocated),
+ * `num_samples`, `channels`, `sample_rate`, and `file_size` (set from the
+ * `file_size` parameter). On failure the returned audio_data will be zeroed
+ * and `samples` will be NULL.
+ *
+ * @param filename Path to the MP3 file to decode.
+ * @param file_size Size of the input file (stored in the returned audio_data);
+ *        the function will still read and decode the file from disk regardless
+ *        of this value.
+ * @return audio_data with decoded PCM samples (caller is responsible for
+ *         freeing `samples`, e.g. with free_audio). If decoding or allocation
+ *         fails, returns an audio_data with `samples == NULL` and `num_samples == 0`.
+ */
 audio_data read_mp3(const char *filename, long file_size) {
     audio_data audio = {0};
     audio.file_size = file_size;
@@ -243,6 +297,18 @@ audio_data read_mp3(const char *filename, long file_size) {
 }
 
 
+/**
+ * Auto-detect audio file format and decode into PCM audio_data.
+ *
+ * Detects the file type for the given filename and dispatches to the appropriate
+ * decoder (WAV or MP3). On success returns an audio_data populated with sample
+ * buffer, sample count, sample rate, channels, and file_size. If the format is
+ * unsupported or decoding fails, an empty/zeroed audio_data is returned and an
+ * error is logged.
+ *
+ * @param filename Path to the input audio file to inspect and decode.
+ * @return Decoded audio_data structure. Fields will be zero/NULL on failure.
+ */
 audio_data auto_detect(const char *filename) {
     audio_data audio = {0};
     

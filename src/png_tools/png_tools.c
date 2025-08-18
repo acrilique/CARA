@@ -1,6 +1,22 @@
 #include "png_tools/png_tools.h"
 #include "utils/bench.h"
 
+/**
+ * Apply a background color to an RGBA image in-place.
+ *
+ * For each pixel, if the RGB components are all zero (pure black) they are
+ * replaced with the provided color's RGB components. The alpha component of
+ * every pixel is set to the provided color's alpha.
+ *
+ * The function operates in-place on a tightly packed 4-byte-per-pixel RGBA
+ * buffer and does not allocate memory.
+ *
+ * @param image Pointer to the image buffer (must contain at least width * height * 4 bytes).
+ *              Pixels are laid out as interleaved RGBA bytes.
+ * @param width Width of the image in pixels.
+ * @param height Height of the image in pixels.
+ * @param color Four-byte RGBA color (color[0]=R, color[1]=G, color[2]=B, color[3]=A).
+ */
 void add_bg(unsigned char *image, size_t width, size_t height, unsigned char color[4]) {
     const size_t num_pixels = width * height;
     
@@ -15,6 +31,19 @@ void add_bg(unsigned char *image, size_t width, size_t height, unsigned char col
     }
 }
 
+/**
+ * Write an 8-bit RGBA image buffer to a PNG file.
+ *
+ * The provided image buffer is written as an 8-bit per channel RGBA PNG (no interlace).
+ * The function allocates a temporary row buffer and writes the image row-by-row using libpng.
+ * On failure (file open, libpng initialization, or libpng error), the function logs an error
+ * and terminates the process via exit(1).
+ *
+ * @param filename Path to the output PNG file to create/overwrite.
+ * @param image Pointer to the source image pixels in row-major order (RGBA, 4 bytes per pixel).
+ * @param width Image width in pixels.
+ * @param height Image height in pixels.
+ */
 void save_png(const char *filename, const unsigned char *image, size_t width, size_t height) {
     FILE *fp = fopen(filename, "wb");
     if (!fp) {
@@ -73,6 +102,20 @@ void save_png(const char *filename, const unsigned char *image, size_t width, si
     fclose(fp);
 }
 
+/**
+ * Resize an RGBA image using nearest-neighbor sampling.
+ *
+ * The input image is expected as a contiguous row-major buffer with 4 bytes per pixel
+ * (R,G,B,A). The function allocates and returns a new buffer of size new_width * new_height * 4.
+ * The caller is responsible for freeing the returned buffer.
+ *
+ * @param original Pointer to the source image buffer (RGBA, row-major).
+ * @param orig_width Width of the source image in pixels.
+ * @param orig_height Height of the source image in pixels.
+ * @param new_width Desired width of the resized image in pixels.
+ * @param new_height Desired height of the resized image in pixels.
+ * @return Pointer to a newly allocated RGBA buffer containing the resized image.
+ */
 unsigned char* resize_image(const unsigned char *original, size_t orig_width, size_t orig_height, size_t new_width, size_t new_height) {
 
     unsigned char *resized = (unsigned char *)malloc(new_width * new_height * 4);
