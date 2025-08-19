@@ -32,12 +32,12 @@
      * @brief Plotting configuration
      */
     typedef struct {
-        char bg_color[4];              /**< Background RGBA */
+        unsigned char bg_color[4];        /**< Background RGBA */
         const unsigned short int cs_enum; /**< Colormap selection enum */
-        const bool db;                /**< Whether to use dB scaling */
-        char output_file[500]; /**< Output file name */
-        size_t w;                     /**< Width */
-        size_t h;                     /**< Height */
+        const bool db;                    /**< Whether to use dB scaling */
+        char output_file[500];            /**< Output file name */
+        size_t w;                         /**< Width */
+        size_t h;                         /**< Height */
     } plot_t;
 
     /**

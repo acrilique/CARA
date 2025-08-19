@@ -51,6 +51,7 @@ void print_bounds(bounds2d_t *bounds) {
  */
 void set_limits(bounds2d_t *bounds, const size_t max_freq, const size_t max_time) {
     bounds->time.end_d = max_time;
+    bounds->freq.end_d = max_freq;
 }
 
 /**
@@ -69,7 +70,7 @@ void init_bounds(bounds2d_t *bounds, stft_t *result) {
     bounds->time.start_d = 0;
 
     bounds->freq.start_d = hz_to_index(result->num_frequencies, result->sample_rate, bounds->freq.start_f);
-    bounds->freq.end_d = hz_to_index(result->num_frequencies, result->sample_rate, bounds->freq.end_f);
+    bounds->freq.end_d   = hz_to_index(result->num_frequencies, result->sample_rate, bounds->freq.end_f);
 }
 
 /**
@@ -144,6 +145,7 @@ inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
     }
 
     save_heatmap(&hm, settings->output_file, w, h, settings->bg_color, settings->cs_enum);
+    free(hm);
 }
 
 /*

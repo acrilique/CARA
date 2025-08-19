@@ -155,7 +155,7 @@
     * @param mu_s      Average elapsed time per FFT in microseconds.
     * @param FFT_size  Number of FFT points (N).
     */
-    double FFT_bench(double mu_s, unsigned int FFT_size,bool log);
+    double FFT_bench(double mu_s, unsigned int FFT_size);
 
     /**
     * @brief Choose a display color for ranking output based on percentage.

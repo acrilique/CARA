@@ -286,7 +286,7 @@ filter_bank_t gen_filterbank(filter_type_t type,
     };
 
     const size_t num_f     = fft_size / 2;
-    const size_t avg_len   = n_filters * (fft_size * 3 / 512);
+    const size_t avg_len   = n_filters * num_f;
     non_zero.freq_indexs   = malloc(avg_len * sizeof(size_t));
     non_zero.weights       = malloc(avg_len * sizeof(float));
     
@@ -457,7 +457,7 @@ void window_function(float *window_values, size_t window_size, const char *windo
         }
     } else if (strcmp(window_type, "bartlett") == 0) {
         for (size_t i = 0; i < window_size; i++)
-            window_values[i] = 1.0f - fabsf((float)(i - (N - 1.0) / 2.0) / ((N - 1.0) / 2.0));
+            window_values[i] = 1.0 - fabs((i - (N - 1.0) / 2.0) / ((N - 1.0) / 2.0));
     } else if (strcmp(window_type, "flattop") == 0) {
         for (size_t i = 0; i < window_size; i++) {
             double phase = 2.0 * M_PI * i / (N - 1.0);
@@ -607,7 +607,7 @@ stft_t stft(audio_data *audio, size_t window_size, size_t hop_size, float *windo
     }
 
     if (audio->channels < 1 || audio->channels > 2) {
-        ERROR("Invalid number of channels: %u (must be 1 or 2).", audio->channels);
+        ERROR("Invalid number of channels: %zu (must be 1 or 2).", audio->channels);
         return result;
     }
 
@@ -680,7 +680,7 @@ stft_t stft(audio_data *audio, size_t window_size, size_t hop_size, float *windo
         result.benchmark.num_frames          = output_size;
         result.benchmark.avg_fft_time_us     = (double)total_fft_time / output_size;
         result.benchmark.parallel_efficiency = 100.0;
-        result.benchmark.fft_gflops          = FFT_bench(result.benchmark.avg_fft_time_us, window_size,true);
+        result.benchmark.fft_gflops          = FFT_bench(result.benchmark.avg_fft_time_us, window_size);
     }
     else{
         LOG("function got thrds = %d", n_threads);
@@ -724,7 +724,7 @@ stft_t stft(audio_data *audio, size_t window_size, size_t hop_size, float *windo
         result.benchmark.num_frames           = output_size;
         result.benchmark.avg_fft_time_us      = (double)((total_fft_time/(double)n_threads)  / output_size);
         result.benchmark.parallel_efficiency  = (total_fft_time / (double)n_threads * 100.0) / (end_time - start_time);
-        result.benchmark.fft_gflops           = FFT_bench(result.benchmark.avg_fft_time_us, window_size,true);
+        result.benchmark.fft_gflops           = FFT_bench(result.benchmark.avg_fft_time_us, window_size);
 
         for (size_t t = 0; t < n_threads; t++) {
             fftwf_destroy_plan(plan_array[t]);

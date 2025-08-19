@@ -25,7 +25,7 @@
         size_t            num_mel_filters;
         float             min_mel_freq;
         float             max_mel_freq;
-        unsigned short    num_mfcc_coeffs;
+        size_t            num_mfcc_coeffs;
         bool              compute_mel;
         bool              compute_mfcc;
         unsigned short    cs_stft;

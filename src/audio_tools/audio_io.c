@@ -164,9 +164,9 @@ audio_data read_wav(const char *filename, long file_size) {
 frames find_mp3_frame_offsets(file_buffer *buf) {
     frames result = {.data = NULL, .count = 0, .avg_byte_per_frame = 0.0f};
 
-    int offset = 0;
+    uint64_t offset       = 0;
     int free_format_bytes = 0;
-    int frame_bytes = 0;
+    int frame_bytes       = 0;
 
     const int max_frames = buf->size / WORST_CASE_FRAME_SIZE;   // see audio_io.h line 5
 
@@ -179,7 +179,7 @@ frames find_mp3_frame_offsets(file_buffer *buf) {
     int frame_index = 0;
     int total_bytes = 0;
 
-    while (offset < buf->size && frame_index < max_frames) {
+   while (offset < buf->size && frame_index < max_frames) {
         int next_offset = mp3d_find_frame(buf->data + offset, buf->size - offset, &free_format_bytes, &frame_bytes);
 
         if (frame_bytes == 0 || next_offset < 0)

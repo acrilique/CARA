@@ -139,7 +139,7 @@ void format_scaled(double val, char *buffer, size_t buf_size, const char *unit) 
  * @param log Unused; accepted for API compatibility and ignored by this function.
  * @return Estimated performance in GFLOPS (double).
  */
-double FFT_bench(double mu_s, unsigned int FFT_size, bool log) {
+double FFT_bench(double mu_s, unsigned int FFT_size) {
     if (mu_s <= 0.0)
         return 0.0;
 

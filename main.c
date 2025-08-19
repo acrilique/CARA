@@ -45,14 +45,14 @@ static void finalize_settings(cli_options_t *opts, stft_t *result) {
 
         // Clamp number of mel filters
         if (opts->num_mel_filters > end_idx - start_idx) {
-            LOG("Warning: num_mel_filters (%d) > available bins (%zu), clamping to %zu",
+            LOG("Warning: num_mel_filters (%zu) > available bins (%zu), clamping to %zu",
                 opts->num_mel_filters, end_idx - start_idx, end_idx - start_idx);
             opts->num_mel_filters = end_idx - start_idx;
         }
 
         // Clamp number of MFCC coefficients
         if (opts->compute_mfcc && opts->num_mfcc_coeffs > opts->num_mel_filters) {
-            LOG("Warning: num_mfcc_coeffs (%d) > num_mel_filters (%d), clamping to %d",
+            LOG("Warning: num_mfcc_coeffs (%zu) > num_mel_filters (%zu), clamping to %zu",
                 opts->num_mfcc_coeffs, opts->num_mel_filters, opts->num_mel_filters);
             opts->num_mfcc_coeffs = opts->num_mel_filters;
         }
@@ -105,9 +105,8 @@ int main(int argc, char *argv[]) {
    
     if(valid){
 
-        LOG(GREEN,"✅ All inputs are valid");
+        LOG("%s✅ All inputs are valid%s",GREEN,RESET);
         print_cli_summary(&opts);
-    
     
 
 
@@ -147,8 +146,9 @@ int main(int argc, char *argv[]) {
         bounds.freq.start_f   = opts.min_mel_freq;
         bounds.freq.end_f     = opts.max_mel_freq;  // No need for fallback check, finalize_audio_dependent_defaults() handles this
 
-        init_bounds(&bounds, &result);
+        
         set_limits(&bounds, result.num_frequencies, result.output_size);
+        init_bounds(&bounds, &result);
 
         const size_t t_len   = bounds.time.end_d - bounds.time.start_d;
         const size_t f_len   = bounds.freq.end_d - bounds.freq.start_d;
@@ -237,7 +237,7 @@ int main(int argc, char *argv[]) {
 
     }
     else{
-        ERROR("Input Validation failed");
+        ERROR("❌ Input Validation failed");
     }
 
     return 0;

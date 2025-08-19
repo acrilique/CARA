@@ -88,7 +88,6 @@ void parse_cli(int argc, char *argv[], cli_options_t *opts) {
     }
 
 }
-
 /**
  * Print a formatted summary of the resolved command-line options.
  *
@@ -102,47 +101,53 @@ void parse_cli(int argc, char *argv[], cli_options_t *opts) {
 void print_cli_summary(const cli_options_t *opts) {
     if (!opts) return;
 
-    LOG(BRIGHT_CYAN "════════════════════════════════════════════════════" RESET);
-    LOG(BRIGHT_CYAN " CLI OPTIONS SUMMARY" RESET);
-    LOG(BRIGHT_CYAN "════════════════════════════════════════════════════" RESET);
+    // Header
+    LOG("%s════════════════════════════════════════════════════%s", BRIGHT_CYAN, RESET);
+    LOG("%s           CLI OPTIONS SUMMARY                     %s", BRIGHT_CYAN, RESET);
+    LOG("%s════════════════════════════════════════════════════%s", BRIGHT_CYAN, RESET);
 
-    // Always show STFT
+    // STFT settings
     char *stft_str = (opts->cs_stft != 999) ? cs_from_enum(opts->cs_stft, false) : NULL;
-    LOG(BRIGHT_BLUE "STFT :" RESET " window_size=%d, hop_size=%d, window_type=%s, color_scheme=%s",
-        opts->window_size,  // int
-        opts->hop_size,     // int
-        opts->window_type,
+    LOG("%sSTFT  :%s window_size=%d, hop_size=%d, window_type=%s, color_scheme=%s",
+        BRIGHT_BLUE, RESET,
+        opts->window_size,
+        opts->hop_size,
+        opts->window_type ? opts->window_type : "default",
         stft_str ? stft_str : "default");
     if (stft_str) free(stft_str);
 
-    // Show MEL only if enabled
+    // MEL settings
     if (opts->compute_mel) {
         char *mel_str = (opts->cs_mel != 999) ? cs_from_enum(opts->cs_mel, false) : NULL;
-        LOG(BRIGHT_MAGENTA "MEL  :" RESET " num_filters=%zu, min_freq=%.1f Hz, max_freq=%.1f Hz, filterbank=%d, color_scheme=%s",
-            opts->num_mel_filters,   // size_t
-            opts->min_mel_freq,      // double
-            opts->max_mel_freq,      // double
-            opts->filterbank_type,   // int
+        LOG("%sMEL   :%s num_filters=%zu, min_freq=%.1f Hz, max_freq=%.1f Hz, filterbank=%d, color_scheme=%s",
+            BRIGHT_MAGENTA, RESET,
+            opts->num_mel_filters,
+            opts->min_mel_freq,
+            opts->max_mel_freq,
+            opts->filterbank_type,
             mel_str ? mel_str : "default");
         if (mel_str) free(mel_str);
     }
 
-    // Show MFCC only if enabled
+    // MFCC settings
     if (opts->compute_mfcc) {
         char *mfcc_str = (opts->cs_mfcc != 999) ? cs_from_enum(opts->cs_mfcc, false) : NULL;
-        LOG(BRIGHT_YELLOW "MFCC :" RESET " num_coeffs=%zu, color_scheme=%s",
-            opts->num_mfcc_coeffs,  // size_t
+        LOG("%sMFCC  :%s num_coeffs=%zu, color_scheme=%s",
+            BRIGHT_YELLOW, RESET,
+            opts->num_mfcc_coeffs,
             mfcc_str ? mfcc_str : "default");
         if (mfcc_str) free(mfcc_str);
     }
 
-    LOG(BRIGHT_GREEN "Threads:" RESET " %d", opts->num_threads); // int
-    LOG(BRIGHT_GREEN "Cache  :" RESET " %s", opts->cache_folder ? opts->cache_folder : "(none)");
-    LOG(BRIGHT_GREEN "Input  :" RESET " %s", opts->input_file  ? opts->input_file  : "(none)");
-    LOG(BRIGHT_GREEN "Output :" RESET " %s", opts->output_base ? opts->output_base : "(none)");
-    LOG(BRIGHT_CYAN "════════════════════════════════════════════════════" RESET);
-}
+    // Misc settings
+    LOG("%sThreads:%s %d", BRIGHT_GREEN, RESET, opts->num_threads);
+    LOG("%sCache  :%s %s", BRIGHT_GREEN, RESET, opts->cache_folder ? opts->cache_folder : "(none)");
+    LOG("%sInput  :%s %s", BRIGHT_GREEN, RESET, opts->input_file  ? opts->input_file  : "(none)");
+    LOG("%sOutput :%s %s", BRIGHT_GREEN, RESET, opts->output_base ? opts->output_base : "(none)");
 
+    // Footer
+    LOG("%s════════════════════════════════════════════════════%s", BRIGHT_CYAN, RESET);
+}
 
 
 
@@ -164,6 +169,7 @@ void print_cli_summary(const cli_options_t *opts) {
  *         required paths, invalid mel/mfcc configuration, or invalid filter
  *         bank type).
  */
+
 bool validate_cli_options(cli_options_t *opts) {
     const unsigned int mx_thrds = omp_get_max_threads();
 
@@ -185,7 +191,7 @@ bool validate_cli_options(cli_options_t *opts) {
         WARN("Invalid thread count %d, defaulting to 1", opts->num_threads);
         opts->num_threads = 1;
     }
-    if (opts->num_threads > mx_thrds) {
+   if ((unsigned int)opts->num_threads > mx_thrds) {
         WARN("Requested threads %d exceeds max %d, clamping", 
              opts->num_threads, mx_thrds);
         opts->num_threads = mx_thrds;
@@ -194,12 +200,11 @@ bool validate_cli_options(cli_options_t *opts) {
     // ─── Mel / MFCC Validation ────────────────────────────────────
     if (opts->compute_mel || opts->compute_mfcc) {
         if (opts->num_mel_filters < 1) {
-            ERROR("Number of mel filters %d must be >= 1", opts->num_mel_filters);
+            ERROR("Number of mel filters %zu must be >= 1", opts->num_mel_filters);
             valid = false;
         }
         if (opts->compute_mfcc && opts->num_mfcc_coeffs > opts->num_mel_filters) {
-            ERROR("MFCC coeffs %d cannot exceed mel filters %d", 
-                  opts->num_mfcc_coeffs, opts->num_mel_filters);
+            ERROR("MFCC coeffs %zu cannot exceed mel filters %zu",opts->num_mfcc_coeffs, opts->num_mel_filters);
             valid = false;
         }
         if (opts->min_mel_freq < 0) {
@@ -207,8 +212,7 @@ bool validate_cli_options(cli_options_t *opts) {
             valid = false;
         }
         if (opts->max_mel_freq > 0 && opts->max_mel_freq <= opts->min_mel_freq) {
-            ERROR("Max mel frequency %.1f must be greater than min %.1f", 
-                  opts->max_mel_freq, opts->min_mel_freq);
+            ERROR("Max mel frequency %.1f must be greater than min %.1f", opts->max_mel_freq, opts->min_mel_freq);
             valid = false;
         }
 
@@ -247,14 +251,13 @@ bool validate_cli_options(cli_options_t *opts) {
     }
 
     if (opts->min_mel_freq < 0) {
-        WARN("Warning: min_mel_freq (%d) < 0, clamping to 0", opts->min_mel_freq);
+        WARN("Warning: min_mel_freq (%f) < 0, clamping to 0", opts->min_mel_freq);
         opts->min_mel_freq = 0;
     }
 
     size_t nyquist = opts->sr / 2;
     if (opts->max_mel_freq > nyquist || opts->max_mel_freq < 1) {
-        WARN("Warning: max_mel_freq (%d) > Nyquist (%zu), clamping to %zu", 
-            opts->max_mel_freq, nyquist, nyquist);
+        WARN("Warning: max_mel_freq (%f) > Nyquist (%zu), clamping to %zu",opts->max_mel_freq, nyquist, nyquist);
         opts->max_mel_freq = nyquist;
     }
 

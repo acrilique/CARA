@@ -81,7 +81,7 @@ else
 endif
 
 # Default Target
-.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run prep_dirs
+.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run prep_dirs test_all
 
 all: $(LAST_TARGET)
 
@@ -141,7 +141,6 @@ $(BUILDDIR)/opencv/%.o: %.c
 # Debug Build
 debug: debug_$(LAST_TARGET)
 	@echo "Built $(LAST_TARGET) in Debug Mode"
-
 # Run Last Target
 run:
 	@if [ ! -f "$(LAST_TARGET_FILE)" ]; then \
@@ -151,16 +150,16 @@ run:
 	if [ ! -x "$$LAST_TARGET" ]; then \
 	  echo "Executable '$$LAST_TARGET' not found. Run 'make' first."; exit 1; \
 	fi; \
+	# Ensure cache directory exists \
+	mkdir -p ./cache/FFT; \
 	echo "Running $$LAST_TARGET..."; \
 	./$$LAST_TARGET \
-    -i "/home/dsb/disks/others/fdm/8-12-25/Modified Group Delay.mp3" \
+    -i "./tests/files/black_woodpecker.wav" \
     -o "bird" \
     -ws 512 \
     -hop 128 \
     -wf "hann" \
     -nm 64 \
-    -mi_feq 0 \
-    -mx_feq 8000 \
     -nfcc 12 \
     -stft_cs 4 \
     -fb_cs 6 \
@@ -168,6 +167,71 @@ run:
     -fb "mel" \
     -c "./cache/FFT" \
     -t 4
+
+# Test All Combinations
+test_all:
+	@if [ -z "$(N)" ]; then \
+		echo "Please provide number of combinations: make test_random N=<number>"; exit 1; \
+	fi; \
+	if [ ! -f "$(LAST_TARGET_FILE)" ]; then \
+		echo "No previous build found. Run 'make' first."; exit 1; \
+	fi; \
+	LAST_TARGET=$$(cat $(LAST_TARGET_FILE)); \
+	if [ ! -x "$$LAST_TARGET" ]; then \
+		echo "Executable '$$LAST_TARGET' not found. Run 'make' first."; exit 1; \
+	fi; \
+	mkdir -p ./cache/FFT; \
+	mkdir -p ./tests/out; \
+	echo "Running $$N random combinations with $$LAST_TARGET..."; \
+	WS_LIST="512 1024 2048"; \
+	HOP_LIST="64 128 256"; \
+	WF_LIST="hann hamming blackman"; \
+	FB_LIST="mel bark erb log10 chirp cam"; \
+	NM_LIST="32 64 128"; \
+	NFCC_LIST="12 24"; \
+	MAX_THREADS=$$(nproc); \
+	PASS=0; \
+	FAIL=0; \
+	rm -f run_errors.log; \
+	for i in $$(seq 1 $(N)); do \
+	    ws=$$(shuf -e $$WS_LIST -n1); \
+	    hop=$$(shuf -e $$HOP_LIST -n1); \
+	    wf=$$(shuf -e $$WF_LIST -n1); \
+	    fb=$$(shuf -e $$FB_LIST -n1); \
+	    nm=$$(shuf -e $$NM_LIST -n1); \
+	    nfcc=$$(shuf -e $$NFCC_LIST -n1); \
+	    th=$$(shuf -i 1-$$MAX_THREADS -n1); \
+	    OUT="rand_out_ws$${ws}_hop$${hop}_wf$${wf}_fb$${fb}_nm$${nm}_nfcc$${nfcc}_t$${th}"; \
+	    echo -n "Running $$OUT ... "; \
+	    if ./$$LAST_TARGET \
+	        -i "./tests/files/black_woodpecker.wav" \
+	        -o "./tests/out/$$OUT" \
+	        -ws $$ws \
+	        -hop $$hop \
+	        -wf $$wf \
+	        -nm $$nm \
+	        -nfcc $$nfcc \
+	        -stft_cs 4 \
+	        -fb_cs 6 \
+	        -fcc_cs 17 \
+	        -fb $$fb \
+	        -c "./cache/FFT" \
+	        -t $$th > /dev/null 2>> run_errors.log; then \
+	        echo "✅ TEST PASSED"; \
+	        PASS=$$((PASS+1)); \
+	    else \
+	        echo "❌ TEST FAILED"; \
+	        FAIL=$$((FAIL+1)); \
+	    fi; \
+	done; \
+	echo "----------------------------------------"; \
+	echo "Summary: $$PASS / $$((PASS+FAIL)) tests passed, $$FAIL failed"; \
+	if [ $$FAIL -gt 0 ]; then \
+	    echo "Check 'run_errors.log' for details on failures."; \
+	fi
+
+
+
 
 # Clean Build
 clean:
