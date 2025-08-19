@@ -117,6 +117,9 @@ void fast_copy(float *data, float *mags, bounds2d_t *bounds, const size_t length
  *                  used for the horizontal extent.
  * @param settings  Plot settings (width `w`, height `h`, `db` flag, output
  *                  filename, background color and color scheme).
+
+ **/
+ 
 inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
     const size_t w = settings->w;
     const size_t h = settings->h;
@@ -143,7 +146,7 @@ inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
     save_heatmap(&hm, settings->output_file, w, h, settings->bg_color, settings->cs_enum);
 }
 
-/**
+
  * Apply a mel filter bank to a block of spectral frames and produce mel-band values.
  *
  * For each time frame within bounds->time.{start_d,end_d}, this function computes the
