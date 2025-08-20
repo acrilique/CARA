@@ -2,31 +2,44 @@
 
 **CARA** is a high-performance C library for audio signal processing and visualization, featuring Short-Time Fourier Transform (STFT), Mel spectrograms, Mel-Frequency Cepstral Coefficients (MFCC), and professional-grade heatmap visualizations. Optimized for large-scale audio datasets, it leverages [FFTW](http://www.fftw.org/) with wisdom caching, [OpenMP](https://www.openmp.org/) parallelization, and BLAS ([OpenBLAS](https://www.openblas.net/)) for fast matrix operations. The library supports multiple audio formats (WAV, FLAC, MP3) via [libsndfile](https://libsndfile.github.io/libsndfile/) and [minimp3](https://github.com/lieff/minimp3), and offers customizable visualizations with extensive color schemes.
 
+
 ## ✨ Key Features
 
-- 🎧 **Audio I/O**  
-  Reads WAV, AAC, MP3, and more with automatic format detection.  
-  MP3s are decoded via [minimp3](https://github.com/lieff/minimp3); other formats use [libsndfile](https://libsndfile.github.io/libsndfile/).
+- 🎧 **Audio I/O with Format Detection**  
+  Automatic format detection and reading of WAV, AAC, MP3, and more.  
+  MP3s are decoded via embedded [minimp3](https://github.com/lieff/minimp3); other formats use [libsndfile](https://libsndfile.github.io/libsndfile/).
 
-- 📊 **Short-Time Fourier Transform (STFT)**  
-  Uses FFTW with wisdom caching to plan FFTs efficiently.  
-  Highly tunable: supports Hann, Hamming, Blackman windows, custom hop/window sizes, and frequency range control.
+- 📊 **Optimized Short-Time Fourier Transform (STFT)**  
+  Uses FFTW with wisdom caching for optimal FFT performance.  
+  Supports multiple window functions (Hann, Hamming, Blackman, Blackman-Harris, Bartlett, Flat-top, Gaussian, Kaiser).  
+  Intelligent single/multi-threaded execution with per-thread FFTW plans.
 
-- 🔊 **Filter Bank Spectrograms**  
-  Supports **generalized filter bank construction** using:
-  - `F_MEL` – Mel scale  
-  - `F_BARK` – Bark scale  
-  - `F_ERB` – Equivalent Rectangular Bandwidth  
-  - `F_CHIRP` – Chirp-based scale  
-  - `F_CAM` – Cambridge ERB-rate  
-  - `F_LOG10` – Logarithmic base-10 spacing  
+- 🔊 **Generalized Filter Bank Processing**  
+  Supports **6 perceptual and mathematical frequency scales**:
+  - `F_MEL` – Mel scale (perceptual)
+  - `F_BARK` – Bark scale (critical bands)  
+  - `F_ERB` – Equivalent Rectangular Bandwidth
+  - `F_CHIRP` – Chirp-based logarithmic scale
+  - `F_CAM` – Cambridge ERB-rate scale
+  - `F_LOG10` – Base-10 logarithmic spacing
   
-  Built via `gen_filterbank(...)`, accelerated with OpenMP and BLAS (`cblas_sdot`).  
-  Includes optional decibel scaling (branchless) and built-in plotting of filter shapes for inspection and debugging.
+  Built via `gen_filterbank()` with triangular filter construction, accelerated with BLAS matrix operations (`cblas_sgemm`).
 
-- 🧠 **Mel-Frequency Cepstral Coefficients (MFCC)**  
-  Computes MFCCs using precomputed DCT coefficients and BLAS operations.  
-  OpenMP-parallelized. Supports heatmap visualization with customizable colormaps.
+- 🧠 **Frequency Cepstral Coefficients (FCC)**  
+  Generalized cepstral analysis using precomputed DCT coefficients.  
+  Highly optimized with BLAS operations and OpenMP parallelization.  
+  Supports customizable coefficient counts and visualization.
+
+- 🖼️ **Professional Visualization Engine**  
+  Renders STFTs, filter bank spectrograms, and FCCs as high-resolution PNG heatmaps.  
+  Features **130+ colormap variants** including scientific and OpenCV-style schemes.  
+  Automatic frequency axis inversion for intuitive low-to-high frequency display.
+
+- ⏱️ **Comprehensive Benchmarking**  
+  Microsecond-precision timing for all processing stages.  
+  Detailed parallel efficiency analysis and GFLOP/s measurements.  
+  Multi-threading performance optimization with automatic load balancing.
+
 
 - 🖼️ **Visualization**  
   Renders STFTs, filter bank spectrograms, and MFCCs as high-res PNG heatmaps using [libheatmap](https://github.com/lucasb-eyer/libheatmap).  
@@ -119,74 +132,6 @@ flowchart TD
     end
 ```
 
-## Performance Analysis
-
-### Benchmark Methodology
-
-Performance comparisons are based on a limited test suite (5 audio files, 0.97-58 seconds) using identical processing parameters across implementations. Results should be interpreted cautiously given the small sample size and specific hardware configuration (AMD Ryzen 5 4600H). Real-world performance may vary significantly with different audio characteristics, system configurations, and workloads.
-
-### Comparative Results vs. Librosa
-
-**Test Configuration:**
-- Window size: 2048, Hop size: 128, Window: Hann
-- Mel filters: 256, MFCC coefficients: 64
-- CARA: Fresh file I/O and decoding
-- Librosa: Cached audio arrays (methodological advantage to Librosa)
-
-| Component | CARA Performance | Notes |
-|-----------|------------------|-------|
-| **MFCC** | 5-7× faster | Consistently outperforms across all test files |
-| **Mel Processing** | 1.6-2.7× faster | Performance advantage on most files |
-| **STFT** | 2-3× faster (large files) | Competitive to slower on smaller files |
-| **MP3 Decoding** | Competitive-faster | Fresh minimp3 decoding vs cached arrays |
-
-**FFT Performance:**
-- Peak: 72.6 GFLOP/s (1.55 μs/frame)
-- Sustained: 44-70 GFLOP/s depending on file characteristics
-- Librosa comparison: 3-4 GFLOP/s (from their benchmark reports)
-
-### Compiler Optimization Strategy
-
-CARA employs aggressive compiler optimizations while maintaining numerical stability:
-
-**Core Optimizations:**
-- Link-Time Optimization (LTO) with plugin support for cross-module optimization
-- CPU-native instruction generation (`-march=native`, `-mtune=native`)
-- Advanced loop transformations (blocking, interchange, unroll-and-jam)
-- Automatic vectorization with detailed optimization reporting (`-ftree-vectorize`)
-- Interprocedural analysis for constant propagation and function optimization
-
-**Safety Measures:**
-- Disabled unsafe math optimizations to prevent NaN comparison undefined behavior
-- Stack protection and memory sanitizers in debug builds
-- Frame pointer preservation for debugging support
-
-### Performance Caveats
-
-**Limitations of Current Benchmarks:**
-- Small sample size (5 files) may not represent diverse audio characteristics
-- Single hardware configuration tested (AMD Ryzen 5 4600H)
-- Comparison methodology differences (fresh I/O vs cached)
-- Limited parameter space explored (single window size, hop size combination)
-- Performance results are architecture-specific due to `-march=native` optimizations
-
-**Areas Requiring Further Validation:**
-- Performance scaling with different FFT sizes (512, 1024, 4096)
-- Behavior with varying hop sizes and overlap ratios
-- Memory usage patterns and cache efficiency
-- Performance on different CPU architectures and with portable compilation flags
-- Numerical accuracy comparison with reference implementations
-
-**Known Performance Bottlenecks:**
-- Visualization pipeline (plt:* functions) dominates total runtime (48-86%)
-- Parallel efficiency varies significantly (5.7-34.2%)
-- Memory allocation patterns not yet optimized for real-time use
-
-### Interpretation Guidelines
-
-These benchmarks suggest CARA's DSP core performs competitively with established libraries under specific conditions. However, the limited scope of current testing means these results should be validated in your specific use case before making production decisions. Performance advantages may not generalize across all audio types, parameter combinations, or hardware configurations.
-
-For production deployments, conduct independent benchmarking with representative data and requirements.
 
 ## Requirements
 
@@ -271,48 +216,112 @@ The new CLI supports modern argument parsing:
 ### Programmatic Usage
 
 ```c
-#include "headers/audio_tools/audio_visualizer.h"
+#include "audio_tools/audio_visualizer.h"
+#include "utils/bench.h"
 
 int main() {
-    // Load audio with automatic format detection
-    audio_data audio = auto_detect("input.wav");
-    
-    // Configure processing parameters
-    int window_size = 2048, hop_size = 128;
-    const char *window_type = "hann";
-    
-    // Initialize FFTW with wisdom caching
-    fft_d fft = init_fftw_plan(window_size, "cache/FFT");
-    
-    // Compute STFT
+    const char *input_file = "input.wav";
+    const char *output_base = "output";
+
+    // ------------------ Audio ------------------
+    audio_data audio = auto_detect(input_file);
+    const size_t window_size = 2048;
+    const size_t hop_size    = 128;
+    const size_t num_mel_filters = 256;
+    const size_t num_mfcc_coeffs = 64;
+
+    // ------------------ Window & FFT ------------------
+    START_TIMING();
     float *window_values = malloc(window_size * sizeof(float));
-    window_function(window_values, window_size, window_type);
-    stft_d result = stft(&audio, window_size, hop_size, window_values, &fft);
-    
-    // Generate filter bank (Mel, Bark, ERB, etc.)
-    float *filterbank = calloc((result.num_frequencies + 1) * 256, sizeof(float));
-    filter_bank_t bank = gen_filterbank(F_MEL, 20.0f, 8000.0f, 256,
-                                        audio.sample_rate, window_size, filterbank);
-    
-    // Visualization with 130+ color schemes
-    plot_t settings = {
-        .cs_enum = Viridis,
-        .db = true,
-        .output_file = "output.png"
-    };
-    
-    // Process and visualize
+    window_function(window_values, window_size, "hann");
+    END_TIMING("win");
+
+    START_TIMING();
+    fft_t fft_plan = init_fftw_plan(window_size, "cache/FFT");
+    END_TIMING("fft_plan");
+
+    // ------------------ STFT ------------------
+    plot_t settings = {.cs_enum = Viridis, .db = true, .bg_color = {0,0,0,255}};
+
+    START_TIMING();
+    stft_t result = stft(&audio, window_size, hop_size, window_values, &fft_plan);
+    END_TIMING("stft");
+
+    print_stft_bench(&result.benchmark);
+
+    // ------------------ Bounds & Copy ------------------
     bounds2d_t bounds = {0};
+    bounds.freq.start_f = 0;
+    bounds.freq.end_f   = result.num_frequencies;
+    set_limits(&bounds, result.num_frequencies, result.output_size);
     init_bounds(&bounds, &result);
-    // ... (processing pipeline)
-    
-    // Cleanup
-    free_audio(&audio);
+
+    const size_t t_len = bounds.time.end_d - bounds.time.start_d;
+    const size_t f_len = bounds.freq.end_d - bounds.freq.start_d;
+    float *cont_mem = malloc(t_len * f_len * sizeof(float));
+
+    START_TIMING();
+    fast_copy(cont_mem, result.magnitudes, &bounds, result.num_frequencies);
+    END_TIMING("copy");
+
+    sprintf(settings.output_file, "%s_stft.png", output_base);
+    settings.w = t_len;
+    settings.h = f_len;
+
+    START_TIMING();
+    plot(cont_mem, &bounds, &settings);
+    END_TIMING("plot:stft");
+
+    // ------------------ Mel ------------------
+    float *filterbank = calloc((result.num_frequencies + 1) * (num_mel_filters + 2), sizeof(float));
+    filter_bank_t bank = gen_filterbank(F_MEL, 20.0f, 8000.0f, num_mel_filters,
+                                        audio.sample_rate, window_size, filterbank);
+
+    START_TIMING();
+    float *mel_values = apply_filter_bank(cont_mem, num_mel_filters, result.num_frequencies, filterbank, &bounds);
+    END_TIMING("mel");
+
+    sprintf(settings.output_file, "%s_mel.png", output_base);
+    settings.h = num_mel_filters;
+    settings.w = t_len;
+
+    START_TIMING();
+    plot(mel_values, &bounds, &settings);
+    END_TIMING("plot:mel");
+
+    // ------------------ MFCC ------------------
+    dct_t dft_coff = gen_cosine_coeffs(num_mel_filters, num_mfcc_coeffs);
+
+    START_TIMING();
+    float *fcc_values = FCC(mel_values, &dft_coff, &bounds, &settings);
+    END_TIMING("mfcc");
+
+    sprintf(settings.output_file, "%s_mfcc.png", output_base);
+    settings.h = dft_coff.num_coff;
+    settings.w = t_len;
+
+    START_TIMING();
+    plot(fcc_values, &bounds, &settings);
+    END_TIMING("plot:mfcc");
+
+    // ------------------ Cleanup ------------------
     free_stft(&result);
-    free_fft_plan(&fft);
-    
+    free_audio(&audio);
+    free(window_values);
+    free_fft_plan(&fft_plan);
+    free(cont_mem);
+    free(mel_values);
+    free(fcc_values);
+    free(filterbank);
+    free(bank.freq_indexs);
+    free(bank.weights);
+    free(dft_coff.coeffs);
+
+    print_bench_ranked();
+
     return 0;
 }
+
 ```
 
 ## 📊 Visualizations
@@ -358,12 +367,10 @@ Visualizations using **2048-point FFT**, **128-sample hop size**, **Inferno** co
 
 ## Future Work
 
-- **Broader Benchmarking**: Extended test suite with diverse audio content and hardware configurations
 - **Explicit SIMD Support**: Implement explicit SIMD optimizations (SSE, AVX) beyond compiler auto-vectorization
 - **GPU Acceleration**: CUDA-based implementations using cuFFT and cuBLAS
 - **Real-Time Processing**: Support for streaming audio analysis
 - **Memory Optimization**: Pool allocators and arena-based memory management
-- **Numerical Validation**: Accuracy comparison with reference implementations
 
 ## 📄 License
 
