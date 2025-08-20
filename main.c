@@ -187,7 +187,7 @@ int main(int argc, char *argv[]) {
         
         if (opts.compute_mel) {
             START_TIMING();
-            mel_values         = apply_filter_bank(cont_mem, opts.num_mel_filters, result.num_frequencies, filterbank, &bounds, &settings);
+            mel_values         = apply_filter_bank(cont_mem, opts.num_mel_filters, result.num_frequencies, filterbank, &bounds);
             END_TIMING("mel");
 
             sprintf(settings.output_file, "%s_mel.png", opts.output_base);

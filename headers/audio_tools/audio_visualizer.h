@@ -101,7 +101,7 @@
      * @param settings Optional plot settings
      * @return float* Pointer to filter bank output (allocated)
      */
-    float *apply_filter_bank(float *data, const size_t num_filters, const size_t num_freq, float *mel_filter_bank, bounds2d_t *bounds, plot_t *settings);
+    float *apply_filter_bank(float *data, const size_t num_filters, const size_t num_freq, float *mel_filter_bank, bounds2d_t *bounds);
 
     /**
      * @brief Generate DCT cosine coefficients

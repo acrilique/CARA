@@ -81,7 +81,19 @@ else
 endif
 
 # Default Target
-.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run prep_dirs test_all
+.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run prep_dirs test_all install 
+
+
+install:
+	@if [ -f ./install_libs.sh ]; then \
+		echo "Running library installation..."; \
+		chmod +x ./install_libs.sh; \
+		./install_libs.sh; \
+	else \
+		echo "Error: install_libs.sh not found in $(shell pwd)!"; \
+		exit 1; \
+	fi
+
 
 all: $(LAST_TARGET)
 
@@ -150,23 +162,26 @@ run:
 	if [ ! -x "$$LAST_TARGET" ]; then \
 	  echo "Executable '$$LAST_TARGET' not found. Run 'make' first."; exit 1; \
 	fi; \
-	# Ensure cache directory exists \
 	mkdir -p ./cache/FFT; \
-	echo "Running $$LAST_TARGET..."; \
-	./$$LAST_TARGET \
-    -i "./tests/files/black_woodpecker.wav" \
-    -o "bird" \
-    -ws 512 \
-    -hop 128 \
-    -wf "hann" \
-    -nm 64 \
-    -nfcc 12 \
-    -stft_cs 4 \
-    -fb_cs 6 \
-    -fcc_cs 17 \
-    -fb "mel" \
-    -c "./cache/FFT" \
-    -t 4
+	for f in ./tests/files/*.{wav,mp3}; do \
+	  [ -f "$$f" ] || continue; \
+	  BASENAME=$$(basename "$$f" | sed 's/\.[^.]*$$//'); \
+	  echo "Running $$LAST_TARGET on $$f → outputs/$$BASENAME ..."; \
+	  ./$$LAST_TARGET \
+	    -i "$$f" \
+	    -o "$$BASENAME" \
+	    -ws 2048 \
+	    -hop 128 \
+	    -wf "hann" \
+	    -nm 256 \
+	    -nfcc 64 \
+	    -stft_cs 4 \
+	    -fb_cs 6 \
+	    -fcc_cs 17 \
+	    -fb "mel" \
+	    -c "./cache/FFT" \
+	    -t 4; \
+	done
 
 # Test All Combinations
 test_all:

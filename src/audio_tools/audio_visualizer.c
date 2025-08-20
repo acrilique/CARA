@@ -168,8 +168,7 @@ inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
  * @return Pointer to an allocated float array of length (time_frames * num_filters) on success,
  *         or NULL on allocation failure. The caller is responsible for freeing the returned buffer.
  */
-float *apply_filter_bank(float *cont_mem, size_t num_filters, size_t num_freq, float *mel_filter_bank, bounds2d_t *bounds, plot_t *settings) {
-    const bool   db     = settings->db;
+float *apply_filter_bank(float *cont_mem, size_t num_filters, size_t num_freq, float *mel_filter_bank, bounds2d_t *bounds) {
     const size_t tstart = bounds->time.start_d;
     const size_t tend   = bounds->time.end_d;
     const size_t w      = tend - tstart;
@@ -181,16 +180,29 @@ float *apply_filter_bank(float *cont_mem, size_t num_filters, size_t num_freq, f
         return NULL;
     }
 
-    #pragma omp parallel for
+    /*
+     #pragma omp parallel for
     for (size_t t = tstart; t < tend; t++) {
-        size_t offset_in = (t - tstart) * h;
-        size_t offset_out = (t - tstart) * num_filters;
-
-        for (size_t m = 0; m < num_filters; m++) {
-            float sum = cblas_sdot(h, &cont_mem[offset_in], 1, &mel_filter_bank[m * num_freq], 1); 
-            mel_values[offset_out + m] = brachless_db(sum, db);
+        const size_t offset = (t - tstart) * h;
+        for (size_t f = 0; f < h; f++) {
+            const float val = brachless_db(data[offset + f], db);
+            heatmap_add_weighted_point(hm, t - tstart, h - f - 1, val);
         }
     }
+
+    since there is 2 loops without vectorzation , this will be slower than fully vectozred dot products 
+    */
+
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                w,              // time frames (M)
+                num_filters,    // mel filters (N) 
+                h,              // freq bins (K)
+                1.0,            // alpha
+                cont_mem, h,    // A: spectrogram [w × h]
+                mel_filter_bank, num_freq, // B: filterbank [num_filters × h]
+                0.0,            // beta
+                mel_values, num_filters);  // C: output [w × num_filters]
+
 
     return mel_values;
 }

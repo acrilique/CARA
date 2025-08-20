@@ -6,7 +6,6 @@ set -e
 # install_ubuntu_debian installs required developer and library packages on Debian/Ubuntu via apt (runs `sudo apt update` then `sudo apt install -y` for build-essential, cmake, pkg-config, fftw3, libfftw3-dev, libsndfile1-dev, libpng-dev, and libopenblas-dev).
 install_ubuntu_debian() {
     echo "Installing libraries on Debian/Ubuntu..."
-    sudo apt update
     sudo apt install -y build-essential cmake pkg-config fftw3 libfftw3-dev libsndfile1-dev libpng-dev libopenblas-dev
 }
 
@@ -19,7 +18,7 @@ install_fedora_redhat() {
 # install_arch installs required development and runtime libraries on Arch Linux by running `sudo pacman -Syu --needed` for base-devel, fftw, libsndfile, libpng, and openblas.
 install_arch() {
     echo "Installing libraries on Arch Linux..."
-    sudo pacman -Syu --needed base-devel fftw libsndfile libpng openblas
+    sudo pacman -S --needed base-devel fftw libsndfile libpng openblas
 }
 
 # install_macos installs required libraries on macOS; it ensures Homebrew is installed (if missing) and then uses `brew` to install fftw, libsndfile, libpng, and openblas.
