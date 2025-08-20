@@ -244,7 +244,7 @@ float *FCC(float *mel_values, dct_t *dft_coff, bounds2d_t *bounds, plot_t *setti
         return NULL;
     }
 
-    #pragma omp parallel for
+    /*#pragma omp parallel for
     for (size_t t = tstart; t < tend; t++) {
         size_t offset_in = (t - tstart) * num_f;
         size_t offset_out = (t - tstart) * num_c;
@@ -254,10 +254,23 @@ float *FCC(float *mel_values, dct_t *dft_coff, bounds2d_t *bounds, plot_t *setti
                                             &mel_values[offset_in], 1);
             fcc_values[offset_out + c] = brachless_db(sum, db);
         }
-    }
+    }*/
+
+    // SGEMM: fcc_values[w × num_c] = mel_values[w × num_f] * dft_coff->coeffs^T[num_c × num_f]
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                w,        // number of rows in mel_values (time frames)
+                num_c,    // number of columns in fcc_values (num_coff)
+                num_f,    // inner dimension (num_f)
+                1.0f,     // alpha
+                &mel_values[tstart * num_f], num_f,     // A: mel_values subset
+                dft_coff->coeffs, num_f,               // B: dft_coff->coeffs
+                0.0f,     // beta
+                fcc_values, num_c);                     // C: output fcc_values
+
 
     return fcc_values;
 }
+
 
 /**
  * Generate DCT-like cosine coefficients for a filter bank.

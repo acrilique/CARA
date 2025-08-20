@@ -163,7 +163,7 @@ run:
 	  echo "Executable '$$LAST_TARGET' not found. Run 'make' first."; exit 1; \
 	fi; \
 	mkdir -p ./cache/FFT; \
-	for f in ./tests/files/*.{wav,mp3}; do \
+	for f in ./tests/files/*.wav ./tests/files/*.mp3; do \
 	  [ -f "$$f" ] || continue; \
 	  BASENAME=$$(basename "$$f" | sed 's/\.[^.]*$$//'); \
 	  echo "Running $$LAST_TARGET on $$f → outputs/$$BASENAME ..."; \
@@ -182,6 +182,7 @@ run:
 	    -c "./cache/FFT" \
 	    -t 4; \
 	done
+
 
 # Test All Combinations
 test_all:
