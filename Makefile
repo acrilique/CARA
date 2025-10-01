@@ -45,7 +45,7 @@ LOGFLAGS  = -DLOG_LEVEL=1
 INC_DIR   = headers
 
 CFLAGS = -std=c11 $(WARNFLAGS) $(OPTFLAGS) $(VECFLAGS) $(LIBFLAGS) $(LOGFLAGS) -fopenmp -I$(INC_DIR) -I/usr/include/openblas
-CFLAGS_DEBUG = $(WARNFLAGS) $(DBGFLAGS) $(LIBFLAGS) $(LOGFLAGS) -fopenmp -I$(INC_DIR) -std=c11
+CFLAGS_DEBUG = $(WARNFLAGS) $(DBGFLAGS) $(LIBFLAGS) $(LOGFLAGS) -fopenmp -I$(INC_DIR) -I/usr/include/openblas -std=c11
 LDFLAGS = -lm -lfftw3 -lfftw3f -lsndfile -lpng -fopenmp -lopenblas
 
 # Directory Structure
