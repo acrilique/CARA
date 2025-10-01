@@ -60,6 +60,13 @@ BASE_SOURCES = main.c \
                $(wildcard $(SRCDIR)/utils/*.c) \
                $(wildcard $(SRCDIR)/audio_tools/*.c)
 
+# Test programs
+TEST_ONSET = tests/test_onset.c \
+             $(wildcard $(SRCDIR)/libheatmap/*.c) \
+             $(wildcard $(SRCDIR)/png_tools/*.c) \
+             $(wildcard $(SRCDIR)/utils/*.c) \
+             $(wildcard $(SRCDIR)/audio_tools/*.c)
+
 # Color Scheme Sources
 BUILTIN_DIR    = $(SCHEMEDIR)/builtin
 OPENCV_DIR     = $(SCHEMEDIR)/opencv_like
@@ -81,7 +88,7 @@ else
 endif
 
 # Default Target
-.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run prep_dirs test_all install 
+.PHONY: all clean debug debug_opencv_like debug_builtin test opencv_like builtin run prep_dirs test_all install test_onset
 
 
 install:
@@ -246,10 +253,14 @@ test_all:
 	    echo "Check 'run_errors.log' for details on failures."; \
 	fi
 
-
-
+# Test Onset Detection
+test_onset: builtin
+	@echo "Building onset detection test..."
+	$(CC) $(CFLAGS) -DBUILTIN -o test_onset $(TEST_ONSET) $(LDFLAGS)
+	@echo "Running onset detection test..."
+	./test_onset
 
 # Clean Build
 clean:
 	rm -rf $(BUILDDIR)
-	rm -f builtin opencv_like main $(LAST_TARGET_FILE)
+	rm -f builtin opencv_like main test_onset $(LAST_TARGET_FILE)
