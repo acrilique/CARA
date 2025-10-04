@@ -128,7 +128,8 @@ int main(int argc, char *argv[]) {
         stft_result.num_frequencies, stft_result.output_size);
     
     // Step 3: Compute mel spectrogram
-    float *filterbank = (float *)calloc((stft_result.num_frequencies + 1) * (n_mels + 2), sizeof(float));
+    const size_t filterbank_size = (stft_result.num_frequencies) * (n_mels + 2);
+    float *filterbank = (float *)calloc(filterbank_size, sizeof(float));
     
     START_TIMING();
     filter_bank_t bank = gen_filterbank(F_MEL, 0.0f, audio.sample_rate / 2.0f,
@@ -202,6 +203,35 @@ int main(int argc, char *argv[]) {
     
     power_to_db(mel_spec, mel_db, n_mels * t_len, max_val);
     END_TIMING("power_to_db");
+
+    // Save mel_db to a file for debugging
+    FILE *mel_db_file = fopen("outputs/mel_db_cara.txt", "w");
+    if (mel_db_file) {
+        for (size_t m = 0; m < n_mels; m++) {
+            for (size_t t = 0; t < t_len; t++) {
+                fprintf(mel_db_file, "%.8f ", mel_db[m * t_len + t]);
+            }
+            fprintf(mel_db_file, "\n");
+        }
+        fclose(mel_db_file);
+        LOG("Saved CARA mel_db to outputs/mel_db_cara.txt");
+    }
+    
+    // Save power_to_db input (mel_spec) for debugging
+    FILE *power_spec_file = fopen("outputs/debug_power_spec_cara.txt", "w");
+    if (power_spec_file) {
+        fprintf(power_spec_file, "# CARA Power Spectrogram (before power_to_db)\n");
+        fprintf(power_spec_file, "# Shape: %zu mels x %zu frames\n", n_mels, t_len);
+        fprintf(power_spec_file, "# Max value used as reference: %.8f\n", max_val);
+        for (size_t m = 0; m < n_mels; m++) {
+            for (size_t t = 0; t < t_len; t++) {
+                fprintf(power_spec_file, "%.8f ", mel_spec[m * t_len + t]);
+            }
+            fprintf(power_spec_file, "\n");
+        }
+        fclose(power_spec_file);
+        LOG("Saved CARA power spectrogram to outputs/debug_power_spec_cara.txt");
+    }
     
     // Step 5: Compute onset strength with different parameters
     float frame_rate = (float)audio.sample_rate / hop_size;
@@ -245,14 +275,14 @@ int main(int argc, char *argv[]) {
         save_onset_envelope(output_file, &onset_median);
     }
     
-    LOG("\n%s=== Testing with Local Max Filter ===%s", BRIGHT_YELLOW, RESET);
+    LOG("\n%s=== Testing with Local Max Filter (size=5) ===%s", BRIGHT_YELLOW, RESET);
     START_TIMING();
     onset_envelope_t onset_filtered = onset_strength(
         mel_db, n_mels, t_len,
         1,           // lag
-        3,           // max_size (local max filter)
+        5,           // max_size (local max filter)
         false,       // detrend
-        AGG_MEDIAN,  // aggregation
+        AGG_MEAN,    // aggregation
         NULL,        // ref_spec
         frame_rate
     );

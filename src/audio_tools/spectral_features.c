@@ -193,19 +193,44 @@ void free_stft(stft_t *result) {
 
 
 /**
- * Convert frequency in Hertz to the Mel scale.
+ * Convert frequency in Hertz to the Mel scale using Slaney scale (librosa default).
  *
  * @param hz Frequency in Hertz.
  * @return Corresponding value on the Mel scale.
  */
-double hz_to_mel(double hz)       { return 2595.0 * log10(1.0 + hz / 700.0); }
+double hz_to_mel(double hz) {
+    const double f_min = 0.0;
+    const double f_sp = 200.0 / 3.0;  // ~66.666667
+    const double min_log_hz = 1000.0;
+    const double min_log_mel = (min_log_hz - f_min) / f_sp;
+    const double logstep = log(6.4) / 27.0;
+    
+    if (hz >= min_log_hz) {
+        return min_log_mel + log(hz / min_log_hz) / logstep;
+    } else {
+        return (hz - f_min) / f_sp;
+    }
+}
+
 /**
- * Convert a Mel-scale frequency value to linear frequency in Hertz.
+ * Convert a Mel-scale frequency value to linear frequency in Hertz using Slaney scale (librosa default).
  *
  * @param mel Frequency on the Mel scale.
  * @return Corresponding frequency in Hz.
  */
-double mel_to_hz(double mel)      { return 700.0 * (pow(10.0, mel / 2595.0) - 1.0); }
+double mel_to_hz(double mel) {
+    const double f_min = 0.0;
+    const double f_sp = 200.0 / 3.0;  // ~66.666667
+    const double min_log_hz = 1000.0;
+    const double min_log_mel = (min_log_hz - f_min) / f_sp;
+    const double logstep = log(6.4) / 27.0;
+    
+    if (mel >= min_log_mel) {
+        return min_log_hz * exp(logstep * (mel - min_log_mel));
+    } else {
+        return f_min + f_sp * mel;
+    }
+}
 
 double hz_to_bark(double hz)      { return 6.0 * asinh(hz / 600.0); }
 double bark_to_hz(double bark)    { return 600.0 * sinh(bark / 6.0); }
@@ -285,7 +310,8 @@ filter_bank_t gen_filterbank(filter_type_t type,
         .num_filters = n_filters
     };
 
-    const size_t num_f     = fft_size / 2;
+    // Use fft_size/2 + 1 to match librosa (includes Nyquist bin)
+    const size_t num_f     = fft_size / 2 + 1;
     const size_t avg_len   = n_filters * num_f;
     non_zero.freq_indexs   = malloc(avg_len * sizeof(size_t));
     non_zero.weights       = malloc(avg_len * sizeof(float));
@@ -320,33 +346,36 @@ filter_bank_t gen_filterbank(filter_type_t type,
     for (size_t i = 0; i < n_filters + 2; i++) {
         double scale = scale_min + step * (double)i;
         double hz    = scale_to_hz(scale);
-        bin_edges[i] = hz * (double)(num_f) / (sr / 2.0);
+        bin_edges[i] = hz * (double)(num_f - 1) / (sr / 2.0);
     }
 
+    // Use librosa's exact triangular filter weight calculation
     for (size_t m = 1; m <= n_filters; m++) {
-        double left   = bin_edges[m - 1];
-        double center = bin_edges[m];
-        double right  = bin_edges[m + 1];
-
-        int k_start = (int)floor(left);
-        int k_end   = (int)ceil(right);
-
-        for (int k = k_start; k <= k_end; k++) {
-            if (k < 0 || k >= (int)num_f) continue;
-
-            double weight = 0.0;
-            if (k < center) {
-                weight = (k - left) / (center - left);
-            } else if (k <= right) {
-                weight = (right - k) / (right - center);
-            } else {
-                continue;
+        double left_mel   = scale_to_hz(scale_min + step * (double)(m - 1));
+        double center_mel = scale_to_hz(scale_min + step * (double)m);
+        double right_mel  = scale_to_hz(scale_min + step * (double)(m + 1));
+        
+        double fdiff_left  = center_mel - left_mel;
+        double fdiff_right = right_mel - center_mel;
+        
+        for (size_t k = 0; k < num_f; k++) {
+            double fft_freq = k * sr / (double)fft_size;
+            
+            double ramp_left  = left_mel - fft_freq;
+            double ramp_right = right_mel - fft_freq;
+            
+            double lower = -ramp_left / fdiff_left;
+            double upper = ramp_right / fdiff_right;
+            
+            double weight = fmax(0.0, fmin(lower, upper));
+            
+            // Only store non-zero weights
+            if (weight > 0.0) {
+                non_zero.weights[non_zero.size]     = (float)weight;
+                filter[(m - 1) * num_f + k]         = (float)weight;
+                non_zero.freq_indexs[non_zero.size] = k;
+                non_zero.size++;
             }
-
-            non_zero.weights[non_zero.size]     = (float)weight;
-            filter[(m - 1) * num_f + k]         = (float)weight;
-            non_zero.freq_indexs[non_zero.size] = k;
-            non_zero.size++;
         }
     }
 
@@ -392,8 +421,8 @@ bool init_fft_output(stft_t *result, unsigned int window_size, unsigned int hop_
     result->phasers         = NULL;
     result->magnitudes      = NULL;
     result->frequencies     = NULL;
-    result->num_frequencies = window_size / 2;
-    result->output_size     = (num_samples - window_size) / hop_size + 1; 
+    result->num_frequencies = window_size / 2 + 1;
+    result->output_size     = (num_samples - window_size) / hop_size + 1;
 
     size_t magnitudes_size  = result->num_frequencies * result->output_size * sizeof(float);
     size_t phasers_size     = result->num_frequencies * 2 * result->output_size * sizeof(float);
@@ -497,7 +526,7 @@ void window_function(float *window_values, size_t window_size, const char *windo
  * @param sample_rate Sample rate in Hz used to convert bin indices to frequencies.
  */
 void calculate_frequencies(stft_t *result, size_t window_size, float sample_rate) {
-    size_t half_window_size = window_size / 2;
+    size_t half_window_size = window_size / 2 + 1;
     float scale = sample_rate / window_size;
     result->frequencies = (float*)malloc(half_window_size * sizeof(float));
     if (!result->frequencies) {
