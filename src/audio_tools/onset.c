@@ -64,25 +64,21 @@ void local_max_filter_1d(
     
     // Process each time frame independently
     #pragma omp parallel for schedule(static)
-    for (size_t t = 0; t < n_frames; t++) {
+    for (size_t f = 0; f < n_mels; f++) {
         // For each frequency bin in this frame
-        for (size_t f = 0; f < n_mels; f++) {
+        for (size_t t = 0; t < n_frames; t++) {
             float max_val = -INFINITY;
-            
-            // Find max in window [f - half_window, f + half_window]
-            int start = (int)f - half_window;
-            int end = (int)f + half_window;
-            
+            // Find max in window [t - half_window, t + half_window]
+            int start = (int)t - half_window;
+            int end   = (int)t + half_window;
             if (start < 0) start = 0;
-            if (end >= (int)n_mels) end = (int)n_mels - 1;
-            
+            if (end   >= (int)n_frames) end   = (int)n_frames - 1;
             for (int k = start; k <= end; k++) {
-                float val = input[k * n_frames + t];
+                float val = input[f * n_frames + (size_t)k];
                 if (val > max_val) {
                     max_val = val;
                 }
             }
-            
             output[f * n_frames + t] = max_val;
         }
     }
