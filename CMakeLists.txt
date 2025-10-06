@@ -12,17 +12,27 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -ftree-vectorize -ftree-loop
 # Library flags
 add_definitions(-DMINIMP3_FLOAT_OUTPUT -DLOG_LEVEL=1 -DBUILTIN)
 
-# Find required packages
-find_package(PkgConfig REQUIRED)
+if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
+    find_package(unofficial-fftw3 CONFIG REQUIRED)
+    find_package(Sndfile CONFIG REQUIRED)
+    find_package(OpenBLAS CONFIG REQUIRED)
+    find_package(PNG CONFIG REQUIRED)
+else()
+    # Find required packages
+    find_package(PkgConfig REQUIRED)
 
-# Find FFTW3
-pkg_check_modules(FFTW3 REQUIRED fftw3 fftw3f)
+    # Find FFTW3
+    pkg_check_modules(FFTW3 REQUIRED fftw3 fftw3f)
 
-# Find libsndfile
-pkg_check_modules(SNDFILE REQUIRED sndfile)
+    # Find libsndfile
+    pkg_check_modules(SNDFILE REQUIRED sndfile)
 
-# Find OpenBLAS
-find_package(BLAS REQUIRED)
+    # Find OpenBLAS
+    find_package(BLAS REQUIRED)
+
+    # Find PNG (for visualization features)
+    find_package(PNG REQUIRED)
+endif()
 
 # Add OpenBLAS include directory
 if(EXISTS "/usr/include/openblas")
@@ -31,9 +41,6 @@ endif()
 
 # Find OpenMP
 find_package(OpenMP REQUIRED)
-
-# Find PNG (for visualization features)
-find_package(PNG REQUIRED)
 
 # Include directories
 include_directories(headers)
@@ -54,32 +61,51 @@ list(FILTER CARA_SOURCES EXCLUDE REGEX "test_.*\\.c$")
 add_library(CARA STATIC ${CARA_SOURCES})
 
 # Link libraries
-target_link_libraries(CARA 
-    ${FFTW3_LIBRARIES}
-    ${SNDFILE_LIBRARIES}
-    ${BLAS_LIBRARIES}
-    PNG::PNG
-    OpenMP::OpenMP_C
-    m
-)
+if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
+    target_link_libraries(CARA 
+        unofficial::fftw3::fftw3
+        Sndfile::sndfile
+        OpenBLAS::OpenBLAS
+        PNG::PNG
+        OpenMP::OpenMP_C
+        m
+    )
+else()
+    target_link_libraries(CARA 
+        ${FFTW3_LIBRARIES}
+        ${SNDFILE_LIBRARIES}
+        ${BLAS_LIBRARIES}
+        PNG::PNG
+        OpenMP::OpenMP_C
+        m
+    )
+endif()
 
 # Include directories for linking
-target_include_directories(CARA PUBLIC 
-    ${CMAKE_CURRENT_SOURCE_DIR}/headers
-    ${FFTW3_INCLUDE_DIRS}
-    ${SNDFILE_INCLUDE_DIRS}
-)
+if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
+    target_include_directories(CARA PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}/headers
+    )
+else()
+    target_include_directories(CARA PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}/headers
+        ${FFTW3_INCLUDE_DIRS}
+        ${SNDFILE_INCLUDE_DIRS}
+    )
+endif()
 
 # Add OpenBLAS include directory if it exists
 if(EXISTS "/usr/include/openblas")
     target_include_directories(CARA PRIVATE "/usr/include/openblas")
 endif()
 
-# Compiler flags
-target_compile_options(CARA PRIVATE 
-    ${FFTW3_CFLAGS_OTHER}
-    ${SNDFILE_CFLAGS_OTHER}
-)
+if(NOT (CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake"))
+    # Compiler flags
+    target_compile_options(CARA PRIVATE 
+        ${FFTW3_CFLAGS_OTHER}
+        ${SNDFILE_CFLAGS_OTHER}
+    )
+endif()
 
 # Create alias for easier linking
 add_library(CARA::CARA ALIAS CARA)
