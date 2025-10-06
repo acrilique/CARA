@@ -91,7 +91,7 @@ else()
 endif()
 
 if(NOT MSVC)
-    target_link_libraries(CARA PRIVATE OpenMP::OpenMP_C m)
+    target_link_libraries(CARA PUBLIC OpenMP::OpenMP_C m)
 endif()
 
 # Include directories for linking
