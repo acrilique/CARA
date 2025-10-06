@@ -44,6 +44,10 @@ else()
     if(EXISTS "/opt/homebrew/opt/openblas/include")
         include_directories("/opt/homebrew/opt/openblas/include")
     endif()
+    # omp on macos
+    if(EXISTS "/opt/homebrew/opt/libomp/include")
+        include_directories("/opt/homebrew/opt/libomp/include")
+    endif()
 endif()
 
 # Find OpenMP
