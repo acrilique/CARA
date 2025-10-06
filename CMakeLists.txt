@@ -14,7 +14,7 @@ add_definitions(-DMINIMP3_FLOAT_OUTPUT -DLOG_LEVEL=1 -DBUILTIN)
 
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
     find_package(FFTW3 CONFIG REQUIRED)
-    find_package(Sndfile CONFIG REQUIRED)
+    find_package(libsndfile CONFIG REQUIRED)
     find_package(OpenBLAS CONFIG REQUIRED)
     find_package(PNG CONFIG REQUIRED)
 else()
@@ -34,21 +34,16 @@ else()
     find_package(PNG REQUIRED)
 endif()
 
-# Add OpenBLAS include directory
-if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
-    # vcpkg handles this
-else()
-    if(EXISTS "/usr/include/openblas")
-        include_directories("/usr/include/openblas")
-    endif()
-    if(EXISTS "/opt/homebrew/opt/openblas/include")
-        include_directories("/opt/homebrew/opt/openblas/include")
-    endif()
-    # omp on macos
-    if(EXISTS "/opt/homebrew/opt/libomp/include")
-        message(STATUS "Found libomp include directory")
-        include_directories("/opt/homebrew/opt/libomp/include")
-    endif()
+if(EXISTS "/usr/include/openblas")
+    include_directories("/usr/include/openblas")
+endif()
+if(EXISTS "/opt/homebrew/opt/openblas/include")
+    include_directories("/opt/homebrew/opt/openblas/include")
+endif()
+# omp on macos
+if(EXISTS "/opt/homebrew/opt/libomp/include")
+    message(STATUS "Found libomp include directory")
+    include_directories("/opt/homebrew/opt/libomp/include")
 endif()
 
 # Find OpenMP
