@@ -46,6 +46,7 @@ else()
     endif()
     # omp on macos
     if(EXISTS "/opt/homebrew/opt/libomp/include")
+        message(STATUS "Found libomp include directory")
         include_directories("/opt/homebrew/opt/libomp/include")
     endif()
 endif()
