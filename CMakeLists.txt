@@ -35,8 +35,15 @@ else()
 endif()
 
 # Add OpenBLAS include directory
-if(EXISTS "/usr/include/openblas")
-    include_directories("/usr/include/openblas")
+if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
+    # vcpkg handles this
+else()
+    if(EXISTS "/usr/include/openblas")
+        include_directories("/usr/include/openblas")
+    endif()
+    if(EXISTS "/opt/homebrew/include")
+        include_directories("/opt/homebrew/include")
+    endif()
 endif()
 
 # Find OpenMP
