@@ -34,12 +34,6 @@ else()
     find_package(PNG REQUIRED)
 endif()
 
-if(EXISTS "/usr/include/openblas")
-    include_directories("/usr/include/openblas")
-endif()
-if(EXISTS "/opt/homebrew/opt/openblas/include")
-    include_directories("/opt/homebrew/opt/openblas/include")
-endif()
 # omp on macos
 if(EXISTS "/opt/homebrew/opt/libomp/include")
     message(STATUS "Found libomp include directory")
@@ -68,6 +62,13 @@ list(FILTER CARA_SOURCES EXCLUDE REGEX "test_.*\\.c$")
 
 # Create CARA library
 add_library(CARA STATIC ${CARA_SOURCES})
+
+if(EXISTS "/usr/include/openblas")
+    target_include_directories(CARA PUBLIC "/usr/include/openblas")
+endif()
+if(EXISTS "/opt/homebrew/opt/openblas/include")
+    target_include_directories(CARA PUBLIC "/opt/homebrew/opt/openblas/include")
+endif()
 
 if(MSVC)
     target_compile_options(CARA PUBLIC /openmp)
@@ -107,10 +108,6 @@ else()
     )
 endif()
 
-# Add OpenBLAS include directory if it exists
-if(EXISTS "/usr/include/openblas")
-    target_include_directories(CARA PUBLIC "/usr/include/openblas")
-endif()
 
 if(NOT (CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake"))
     # Compiler flags
