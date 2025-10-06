@@ -15,7 +15,7 @@ add_definitions(-DMINIMP3_FLOAT_OUTPUT -DLOG_LEVEL=1 -DBUILTIN)
 
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
     find_package(FFTW3 CONFIG REQUIRED)
-    find_package(sndfile CONFIG REQUIRED libsndfile)
+    find_package(SndFile CONFIG REQUIRED)
     find_package(OpenBLAS CONFIG REQUIRED)
     find_package(PNG CONFIG REQUIRED)
 else()
@@ -79,7 +79,7 @@ endif()
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
     target_link_libraries(CARA PUBLIC
         FFTW3::fftw3
-        sndfile::sndfile
+        SndFile::sndfile
         OpenBLAS::OpenBLAS
         PNG::PNG
     )
