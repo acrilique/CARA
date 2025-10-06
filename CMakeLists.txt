@@ -13,7 +13,7 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -ftree-vectorize -ftree-loop
 add_definitions(-DMINIMP3_FLOAT_OUTPUT -DLOG_LEVEL=1 -DBUILTIN)
 
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
-    find_package(unofficial-fftw3 CONFIG REQUIRED)
+    find_package(FFTW3 CONFIG REQUIRED)
     find_package(Sndfile CONFIG REQUIRED)
     find_package(OpenBLAS CONFIG REQUIRED)
     find_package(PNG CONFIG REQUIRED)
@@ -63,7 +63,7 @@ add_library(CARA STATIC ${CARA_SOURCES})
 # Link libraries
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
     target_link_libraries(CARA 
-        unofficial::fftw3::fftw3
+        FFTW3::fftw3
         Sndfile::sndfile
         OpenBLAS::OpenBLAS
         PNG::PNG
