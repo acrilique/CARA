@@ -47,7 +47,9 @@ else()
 endif()
 
 # Find OpenMP
-find_package(OpenMP REQUIRED)
+if(NOT MSVC)
+    find_package(OpenMP REQUIRED)
+endif()
 
 # Include directories
 include_directories(headers)
@@ -67,25 +69,29 @@ list(FILTER CARA_SOURCES EXCLUDE REGEX "test_.*\\.c$")
 # Create CARA library
 add_library(CARA STATIC ${CARA_SOURCES})
 
+if(MSVC)
+    target_compile_options(CARA PRIVATE /openmp)
+endif()
+
 # Link libraries
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
-    target_link_libraries(CARA 
+    target_link_libraries(CARA PRIVATE
         FFTW3::fftw3
         Sndfile::sndfile
         OpenBLAS::OpenBLAS
         PNG::PNG
-        OpenMP::OpenMP_C
-        m
     )
 else()
-    target_link_libraries(CARA 
+    target_link_libraries(CARA PRIVATE
         ${FFTW3_LIBRARIES}
         ${SNDFILE_LIBRARIES}
         ${BLAS_LIBRARIES}
         PNG::PNG
-        OpenMP::OpenMP_C
-        m
     )
+endif()
+
+if(NOT MSVC)
+    target_link_libraries(CARA PRIVATE OpenMP::OpenMP_C m)
 endif()
 
 # Include directories for linking
