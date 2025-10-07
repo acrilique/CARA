@@ -135,8 +135,9 @@ inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
     const size_t tstart = bounds->time.start_d;
     const size_t tend   = bounds->time.end_d;
 
+    int t;
     #pragma omp parallel for
-    for (size_t t = tstart; t < tend; t++) {
+    for (t = tstart; t < tend; t++) {
         const size_t offset = (t - tstart) * h;
         for (size_t f = 0; f < h; f++) {
             const float val = brachless_db(data[offset + f], db);
@@ -300,8 +301,9 @@ dct_t gen_cosine_coeffs(const size_t num_filters, const size_t num_coff) {
 
     const float scale = sqrtf(2.0f / (float)num_filters);
 
+    int n;
     #pragma omp parallel for schedule(static, 256)
-    for (size_t n = 0; n < num_coff; n++) {
+    for (n = 0; n < num_coff; n++) {
         for (size_t mel = 0; mel < num_filters; mel++) {
             dft_coff.coeffs[n * num_filters + mel] = scale *
                 cosf((float)M_PI / num_filters * (mel + 0.5f) * n);

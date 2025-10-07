@@ -17,8 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <complex.h>
 #include <fftw3.h>
+#include "utils/compat.h"
 #include "onset.h"
 
 /** @addtogroup audio_features

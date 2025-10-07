@@ -40,11 +40,20 @@ void power_to_db(const float *power, float *db, size_t length, float ref) {
     
     if (ref <= 0.0f) ref = 1.0f;
     
-    #pragma omp parallel for simd schedule(static)
-    for (size_t i = 0; i < length; i++) {
-        float p = power[i] / ref;
-        db[i] = scale * logf(p + epsilon);
-    }
+    #if defined(_MSC_VER)
+        int i;
+        #pragma omp parallel for schedule(static)
+        for (i = 0; i < length; i++) {
+            float p = power[i] / ref;
+            db[i] = scale * logf(p + epsilon);
+        }
+    #else
+        #pragma omp parallel for simd schedule(static)
+        for (int i = 0; i < length; i++) {
+            float p = power[i] / ref;
+            db[i] = scale * logf(p + epsilon);
+        }
+    #endif
 }
 
 void local_max_filter_1d(
@@ -63,8 +72,9 @@ void local_max_filter_1d(
     int half_window = window_size / 2;
     
     // Process each time frame independently
+    int f;
     #pragma omp parallel for schedule(static)
-    for (size_t f = 0; f < n_mels; f++) {
+    for (f = 0; f < n_mels; f++) {
         // For each frequency bin in this frame
         for (size_t t = 0; t < n_frames; t++) {
             float max_val = -INFINITY;
@@ -93,8 +103,9 @@ void aggregate_onset(
 ) {
     if (method == AGG_MEAN) {
         // Compute mean across frequency bins for each time frame
+        int t;
         #pragma omp parallel for schedule(static)
-        for (size_t t = 0; t < n_frames_out; t++) {
+        for (t = 0; t < n_frames_out; t++) {
             float sum = 0.0f;
             for (size_t f = 0; f < n_mels; f++) {
                 sum += onset_diff[f * n_frames_out + t];
@@ -208,14 +219,15 @@ onset_envelope_t onset_strength(
     }
     
     // Compute: max(0, S[f, t] - ref[f, t - lag])
-    #pragma omp parallel for collapse(2) schedule(static)
-    for (size_t f = 0; f < n_mels; f++) {
-        for (size_t t = 0; t < n_frames_out; t++) {
-            size_t curr_idx = f * n_frames + (t + lag);
-            size_t prev_idx = f * n_frames + t;
+    int f;
+    #pragma omp parallel for schedule(static)
+    for (f = 0; f < n_mels; f++) {
+        for (int t = 0; t < n_frames_out; t++) {
+            size_t curr_idx = (size_t)f * n_frames + ((size_t)t + lag);
+            size_t prev_idx = (size_t)f * n_frames + (size_t)t;
             
             float diff = mel_spectrogram[curr_idx] - ref_spec[prev_idx];
-            onset_diff[f * n_frames_out + t] = fmaxf(0.0f, diff);
+            onset_diff[(size_t)f * n_frames_out + (size_t)t] = fmaxf(0.0f, diff);
         }
     }
     

@@ -137,9 +137,10 @@ autocorr_result_t compute_onset_autocorr(
     
     // Compute power spectrum (|FFT|²)
     for (size_t i = 0; i < padded_size / 2 + 1; i++) {
-        float real = crealf(fft_result[i]);
-        float imag = cimagf(fft_result[i]);
-        fft_result[i] = real * real + imag * imag + 0.0f * I;
+        complex_float val = ((complex_float*)fft_result)[i];
+        float real = crealf(val);
+        float imag = cimagf(val);
+        ((complex_float*)fft_result)[i] = _Cbuildf(real * real + imag * imag, 0.0f);
     }
     
     // Execute inverse FFT to get autocorrelation
@@ -216,8 +217,14 @@ void apply_log_normal_prior(
     // Apply log-normal prior: -0.5 * ((log2(bpm) - log2(start_bpm)) / std_bmp)²
     float log2_start = log2f(start_bpm);
     
-    #pragma omp parallel for schedule(static)
-    for (size_t i = 0; i < length; i++) {
+    #if defined(_MSC_VER)
+        int i;
+        #pragma omp parallel for schedule(static)
+        for (i = 0; i < length; i++) {
+    #else
+        #pragma omp parallel for schedule(static)
+        for (int i = 0; i < length; i++) {
+    #endif
         if (bpm_freqs[i] > 0 && isfinite(bpm_freqs[i])) {
             float log2_bpm = log2f(bpm_freqs[i]);
             float log_diff = (log2_bpm - log2_start) / std_bpm;

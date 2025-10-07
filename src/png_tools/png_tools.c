@@ -145,7 +145,7 @@ unsigned char* resize_image(const unsigned char *original, size_t orig_width, si
         resized_row_ptr += resized_row_size;
     }
     
-    LOG("Image resized from (%ld x %ld) -> (%ld x %ld)", orig_width, orig_height, new_width, new_height);
+    LOG("Image resized from (%zu x %zu) -> (%zu x %zu)", orig_width, orig_height, new_width, new_height);
 
     return resized;
 }

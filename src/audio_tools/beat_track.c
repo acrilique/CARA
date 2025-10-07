@@ -9,6 +9,7 @@
 #include "audio_tools/beat_track.h"
 #include "audio_tools/audio_visualizer.h"
 #include "utils/bench.h"
+#include "utils/compat.h"
 #include <float.h>
 
 // Helper function prototypes
