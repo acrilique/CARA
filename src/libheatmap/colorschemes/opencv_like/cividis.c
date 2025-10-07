@@ -1,6 +1,6 @@
 
 #ifndef CIVIDIS
-#define VIRIDIS
+#define CIVIDIS
 #include <stdint.h>
 const unsigned char cividis_data[256 * 4] ={
          0,34,79,63,
