@@ -1,6 +1,7 @@
 #ifndef BENCH_H
     #define BENCH_H
 
+    #include "utils/compat.h"
     #include <time.h>
     #include <stdio.h>
     #include <stddef.h>

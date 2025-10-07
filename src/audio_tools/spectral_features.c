@@ -23,7 +23,10 @@
  */
 
 #include "audio_tools/spectral_features.h"
-
+#include <stdlib.h>
+#ifdef _MSC_VER
+#include <malloc.h>
+#endif
 
 #define ALIGNED_ALLOC_ALIGNMENT 32
 
@@ -59,21 +62,6 @@ static double bessel_i0(double x) {
     return sum;
 }
 
-/**
- * Map a frequency in Hz to an FFT bin index.
- *
- * Converts a frequency `f` (Hz) to the corresponding FFT bin index given `num_freq`
- * (number of positive-frequency bins) and the `sample_rate`. The computed value is
- * floor((2 * num_freq * f) / sample_rate) due to the integer cast.
- *
- * @param num_freq Number of positive-frequency bins (typically N/2 for a real-to-complex FFT).
- * @param sample_rate Sampling rate in Hz.
- * @param f Frequency in Hz to convert.
- * @return Corresponding bin index as a `size_t`.
- */
-inline size_t hz_to_index(size_t num_freq, size_t sample_rate, float f) {
-    return (size_t)((num_freq * f * 2) / sample_rate);
-}
 
 /**
  * Check whether an integer is a non-zero power of two.
@@ -104,7 +92,11 @@ void *aligned_alloc_batch(size_t alignment, size_t size, bool zero_init) {
         return NULL;
     }
 
+#ifdef _MSC_VER
+    void *ptr = _aligned_malloc(size, alignment);
+#else
     void *ptr = aligned_alloc(alignment, size);
+#endif
     if (!ptr) {
         ERROR("aligned_alloc failed for size %zu with alignment %zu.", size, alignment);
         return NULL;
@@ -126,7 +118,11 @@ void *aligned_alloc_batch(size_t alignment, size_t size, bool zero_init) {
  */
 void aligned_free_batch(void *ptr) {
     if (ptr) {
+#ifdef _MSC_VER
+        _aligned_free(ptr);
+#else
         free(ptr);
+#endif
     }
 }
 
@@ -792,11 +788,13 @@ stft_t stft(audio_data *audio, size_t window_size, size_t hop_size, float *windo
     memset(mono, 0, length * sizeof(float));
 
     if (channels == 1) {
+        int i;
         #pragma omp parallel for schedule(static)
-        for (size_t i = 0; i < length; i++) mono[i] = audio->samples[i];
+        for (i = 0; i < length; i++) mono[i] = audio->samples[i];
     } else {
+        int i;
         #pragma omp parallel for schedule(static)
-        for (size_t i = 0; i < length; i++) mono[i] = (audio->samples[i * 2] + audio->samples[i * 2 + 1]) * half;
+        for (i = 0; i < length; i++) mono[i] = (audio->samples[i * 2] + audio->samples[i * 2 + 1]) * half;
     }
 
     long long total_fft_time = 0;
@@ -840,8 +838,9 @@ stft_t stft(audio_data *audio, size_t window_size, size_t hop_size, float *windo
 
         start_time = get_time_us();
 
+        int i;
         #pragma omp parallel for schedule(static)
-        for (size_t i = 0; i < output_size; i++) {
+        for (i = 0; i < output_size; i++) {
             int tid = omp_get_thread_num();
             float *in_local          = in_array[tid];
             fftwf_complex *out_local = out_array[tid];
@@ -884,12 +883,22 @@ stft_t stft(audio_data *audio, size_t window_size, size_t hop_size, float *windo
     fftwf_free(mono);
 
     const size_t total_bins = output_size * num_frequencies;
-    #pragma omp parallel for simd schedule(static)
-    for (size_t i = 0; i < total_bins; i++) {
-        float re = result.phasers[i * 2];
-        float im = result.phasers[i * 2 + 1];
-        result.magnitudes[i] = sqrt(re*re + im*im);
-    }
+    #if defined(_MSC_VER)
+        int i;
+        #pragma omp parallel for schedule(static)
+        for (i = 0; i < total_bins; i++) {
+            float re = result.phasers[i * 2];
+            float im = result.phasers[i * 2 + 1];
+            result.magnitudes[i] = sqrtf(re*re + im*im);
+        }
+    #else
+        #pragma omp parallel for simd schedule(static)
+        for (int i = 0; i < total_bins; i++) {
+            float re = result.phasers[i * 2];
+            float im = result.phasers[i * 2 + 1];
+            result.magnitudes[i] = sqrtf(re*re + im*im);
+        }
+    #endif
 
     return result;
 }

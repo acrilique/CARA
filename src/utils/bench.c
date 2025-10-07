@@ -1,4 +1,5 @@
 #include "utils/bench.h"
+#include "utils/compat.h"
 
 /*
  * The MIT License (MIT)
@@ -48,11 +49,21 @@ void benchmark_init() {
  *
  * @return Monotonic time in microseconds as a signed 64-bit integer.
  */
+#ifdef _MSC_VER
+#include <windows.h>
+long long get_time_us() {
+    LARGE_INTEGER t, f;
+    QueryPerformanceCounter(&t);
+    QueryPerformanceFrequency(&f);
+    return (t.QuadPart * 1000000) / f.QuadPart;
+}
+#else
 long long get_time_us() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (long long)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
+#endif
 
 /**
  * Record the elapsed time (since benchmarks.start_time) for a named function.

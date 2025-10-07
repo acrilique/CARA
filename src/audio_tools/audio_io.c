@@ -1,6 +1,7 @@
 #include "audio_tools/audio_io.h"
 #include "audio_tools/minimp3.h"
 #include "utils/bench.h"
+#include <inttypes.h>
 
 /**
  * Print summary metadata for an audio_data object and return its duration in seconds.
@@ -74,7 +75,7 @@ file_buffer read_file(const char *filename) {
     result.size = (uint64_t)st.st_size;
     result.data = (uint8_t *)malloc(result.size);
     if (!result.data) {
-        ERROR("Memory allocation failed for file '%s' (%lu bytes)", filename, result.size);
+        ERROR("Memory allocation failed for file '%s' (%" PRIu64 " bytes)", filename, result.size);
         fclose(fin);
         return result;
     }

@@ -163,7 +163,21 @@
 
     /* ---- Frequency and Scale Utilities ---- */
 
-    size_t hz_to_index(size_t num_freq, size_t sample_rate, float f);
+    /**
+     * Map a frequency in Hz to an FFT bin index.
+     *
+     * Converts a frequency `f` (Hz) to the corresponding FFT bin index given `num_freq`
+     * (number of positive-frequency bins) and the `sample_rate`. The computed value is
+     * floor((2 * num_freq * f) / sample_rate) due to the integer cast.
+     *
+     * @param num_freq Number of positive-frequency bins (typically N/2 for a real-to-complex FFT).
+     * @param sample_rate Sampling rate in Hz.
+     * @param f Frequency in Hz to convert.
+     * @return Corresponding bin index as a `size_t`.
+     */
+    static inline size_t hz_to_index(size_t num_freq, size_t sample_rate, float f) {
+        return (size_t)((num_freq * f * 2) / sample_rate);
+    }
     float safe_diff(size_t a, size_t b);
     float brachless_db(float mag, bool db);
 
@@ -179,7 +193,6 @@
     double hz_to_cent(double hz);    double cent_to_hz(double cent);
 
 
-     #include "audio_io.h"
     #include "../utils/bench.h"
 
     /** @} */  // end of audio_features
