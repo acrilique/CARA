@@ -67,6 +67,12 @@ TEST_ONSET = tests/test_onset.c \
              $(wildcard $(SRCDIR)/utils/*.c) \
              $(wildcard $(SRCDIR)/audio_tools/*.c)
 
+TEST_TEMPO = tests/test_tempo.c \
+             $(wildcard $(SRCDIR)/libheatmap/*.c) \
+             $(wildcard $(SRCDIR)/png_tools/*.c) \
+             $(wildcard $(SRCDIR)/utils/*.c) \
+             $(wildcard $(SRCDIR)/audio_tools/*.c)
+
 # Color Scheme Sources
 BUILTIN_DIR    = $(SCHEMEDIR)/builtin
 OPENCV_DIR     = $(SCHEMEDIR)/opencv_like
@@ -260,7 +266,15 @@ test_onset: builtin
 	@echo "Running onset detection test..."
 	@mkdir -p outputs cache/FFT tests/out
 	./test_onset
+
+# Test Tempo Estimation
+test_tempo: builtin
+	@echo "Building tempo estimation test..."
+	$(CC) $(CFLAGS) -DBUILTIN -o test_tempo $(TEST_TEMPO) $(LDFLAGS)
+	@echo "Running tempo estimation test..."
+	./test_tempo
+
 # Clean Build
 clean:
 	rm -rf $(BUILDDIR)
-	rm -f builtin opencv_like main test_onset $(LAST_TARGET_FILE)
+	rm -f builtin opencv_like main test_onset test_tempo $(LAST_TARGET_FILE)
