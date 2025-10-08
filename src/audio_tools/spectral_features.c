@@ -1,11 +1,3 @@
-#include "audio_tools/spectral_features.h"
-
-
-#define ALIGNED_ALLOC_ALIGNMENT 32
-
-
-unsigned int n_threads = 1;
-
 /*
  * The MIT License (MIT)
  * 
@@ -29,6 +21,21 @@ unsigned int n_threads = 1;
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+#include "audio_tools/spectral_features.h"
+
+
+#define ALIGNED_ALLOC_ALIGNMENT 32
+
+
+unsigned int n_threads = 1;
+
+// Slaney scale constants
+static const double f_min = 0.0;
+static const double f_sp = 200.0 / 3.0;
+static const double min_log_hz = 1000.0;
+static const double min_log_mel = (1000.0 - 0.0) / (200.0 / 3.0);
+static const double logstep = 1.8562979903656262 / 27.0; // log(6.4) / 27.0
 
 /**
  * Compute the modified Bessel function of the first kind of order zero, I0(x).
@@ -199,12 +206,6 @@ void free_stft(stft_t *result) {
  * @return Corresponding value on the Mel scale.
  */
 double hz_to_mel(double hz) {
-    const double f_min = 0.0;
-    const double f_sp = 200.0 / 3.0;  // ~66.666667
-    const double min_log_hz = 1000.0;
-    const double min_log_mel = (min_log_hz - f_min) / f_sp;
-    const double logstep = log(6.4) / 27.0;
-    
     if (hz >= min_log_hz) {
         return min_log_mel + log(hz / min_log_hz) / logstep;
     } else {
@@ -219,12 +220,6 @@ double hz_to_mel(double hz) {
  * @return Corresponding frequency in Hz.
  */
 double mel_to_hz(double mel) {
-    const double f_min = 0.0;
-    const double f_sp = 200.0 / 3.0;  // ~66.666667
-    const double min_log_hz = 1000.0;
-    const double min_log_mel = (min_log_hz - f_min) / f_sp;
-    const double logstep = log(6.4) / 27.0;
-    
     if (mel >= min_log_mel) {
         return min_log_hz * exp(logstep * (mel - min_log_mel));
     } else {
