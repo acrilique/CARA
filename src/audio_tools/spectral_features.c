@@ -374,6 +374,9 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
             
             double fdiff_left  = center_hz - left_hz;
             double fdiff_right = right_hz - center_hz;
+
+            // Guard against division by zero
+            if (fdiff_left <= 0.0 || fdiff_right <= 0.0) continue;
             
             for (size_t k = 0; k < num_f; k++) {
                 double fft_freq = k * config->sample_rate / (double)config->fft_size;
@@ -413,11 +416,13 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
 
                 double weight = 0.0;
                 if (k < center) {
-                    if (center - left > 0)
-                        weight = (k - left) / (center - left);
+                    double denom = center - left;
+                    if (denom > 0)
+                        weight = (k - left) / denom;
                 } else if (k <= right) {
-                    if (right - center > 0)
-                        weight = (right - k) / (right - center);
+                    double denom = right - center;
+                    if (denom > 0)
+                        weight = (right - k) / denom;
                 } else {
                     continue;
                 }
