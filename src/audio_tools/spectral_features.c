@@ -319,15 +319,30 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
         .freq_indexs = NULL,
         .weights     = NULL,
         .size        = 0,
-        .num_filters = config->num_filters
     };
+
+    if (!config || config->num_filters == 0 || config->fmax <= config->fmin || config->sample_rate == 0 || config->fft_size == 0) {
+        ERROR("Invalid filterbank configuration: num_filters=%zu, fmax=%.2f, fmin=%.2f, sample_rate=%zu, fft_size=%zu",
+              config ? config->num_filters : 0, config ? config->fmax : 0.0, config ? config->fmin : 0.0, config ? config->sample_rate : 0, config ? config->fft_size : 0);
+        return non_zero;
+    }
+
+    non_zero.num_filters = config->num_filters;
 
     const size_t num_f     = config->include_nyquist ? (config->fft_size / 2 + 1) : (config->fft_size / 2);
     const size_t avg_len   = config->num_filters * num_f;
     non_zero.freq_indexs   = malloc(avg_len * sizeof(size_t));
+    if (!non_zero.freq_indexs) {
+        ERROR("Failed to allocate freq_indexs");
+        return non_zero;
+    }
     non_zero.weights       = malloc(avg_len * sizeof(float));
-    
-  
+    if (!non_zero.weights) {
+        ERROR("Failed to allocate weights");
+        free(non_zero.freq_indexs);
+        return non_zero;
+    }
+
     double *hz_edges = malloc((config->num_filters + 2) * sizeof(double));
     if (!hz_edges) {
         ERROR("Failed to allocate hz_edges");
@@ -398,7 +413,7 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
                 
                 double weight = fmax(0.0, fmin(lower, upper));
                 
-                if (weight > 0.0) {
+                if (weight > 0.0 && non_zero.size < avg_len) {
                     non_zero.weights[non_zero.size]     = (float)weight;
                     filter[(m - 1) * num_f + k]         = (float)weight;
                     non_zero.freq_indexs[non_zero.size] = k;
@@ -436,7 +451,7 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
                     continue;
                 }
 
-                if (weight > 0.0) {
+                if (weight > 0.0 && non_zero.size < avg_len) {
                     non_zero.weights[non_zero.size]     = (float)weight;
                     filter[(m - 1) * num_f + k]         = (float)weight;
                     non_zero.freq_indexs[non_zero.size] = k;
@@ -449,8 +464,30 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
 
     free(hz_edges);
     
-    non_zero.freq_indexs = realloc(non_zero.freq_indexs, non_zero.size * sizeof(size_t));
-    non_zero.weights     = realloc(non_zero.weights,     non_zero.size * sizeof(float));
+    // Reallocate with temporary pointers to avoid memory leaks on failure
+    size_t* temp_freq_indexs = realloc(non_zero.freq_indexs, non_zero.size * sizeof(size_t));
+    if (non_zero.size > 0 && !temp_freq_indexs) {
+        ERROR("Failed to reallocate freq_indexs");
+        free(non_zero.freq_indexs);
+        free(non_zero.weights);
+        non_zero.freq_indexs = NULL;
+        non_zero.weights = NULL;
+        non_zero.size = 0;
+        return non_zero;
+    }
+    non_zero.freq_indexs = temp_freq_indexs;
+
+    float* temp_weights = realloc(non_zero.weights, non_zero.size * sizeof(float));
+    if (non_zero.size > 0 && !temp_weights) {
+        ERROR("Failed to reallocate weights");
+        free(non_zero.freq_indexs);
+        free(non_zero.weights);
+        non_zero.freq_indexs = NULL;
+        non_zero.weights = NULL;
+        non_zero.size = 0;
+        return non_zero;
+    }
+    non_zero.weights = temp_weights;
 
     return non_zero;
 }
