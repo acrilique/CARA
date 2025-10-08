@@ -73,6 +73,12 @@ TEST_TEMPO = tests/test_tempo.c \
              $(wildcard $(SRCDIR)/utils/*.c) \
              $(wildcard $(SRCDIR)/audio_tools/*.c)
 
+TEST_BEAT_TRACK = tests/test_beat_track.c \
+                  $(wildcard $(SRCDIR)/libheatmap/*.c) \
+                  $(wildcard $(SRCDIR)/png_tools/*.c) \
+                  $(wildcard $(SRCDIR)/utils/*.c) \
+                  $(wildcard $(SRCDIR)/audio_tools/*.c)
+
 # Color Scheme Sources
 BUILTIN_DIR    = $(SCHEMEDIR)/builtin
 OPENCV_DIR     = $(SCHEMEDIR)/opencv_like
@@ -274,7 +280,14 @@ test_tempo: builtin
 	@echo "Running tempo estimation test..."
 	./test_tempo
 
+# Test Beat Tracking
+test_beat_track: builtin
+	@echo "Building beat tracking test..."
+	$(CC) $(CFLAGS) -DBUILTIN -o test_beat_track $(TEST_BEAT_TRACK) $(LDFLAGS)
+	@echo "Running beat tracking test..."
+	./test_beat_track
+
 # Clean Build
 clean:
 	rm -rf $(BUILDDIR)
-	rm -f builtin opencv_like main test_onset test_tempo $(LAST_TARGET_FILE)
+	rm -f builtin opencv_like main test_onset test_tempo test_beat_track $(LAST_TARGET_FILE)
