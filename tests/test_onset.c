@@ -98,8 +98,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    LOG("Loaded audio: %zu samples, %zu Hz, %zu channels",
-        audio.num_samples, audio.sample_rate, audio.channels);
+    LOG("Loaded audio: %zu samples, %f Hz, %zu channels",
+        audio.num_samples, (float)audio.sample_rate, audio.channels);
     
     // Step 2: Compute STFT
     const size_t window_size = 2048;
@@ -132,8 +132,8 @@ int main(int argc, char *argv[]) {
     float *filterbank = (float *)calloc(filterbank_size, sizeof(float));
     
     START_TIMING();
-    filter_bank_t bank = gen_filterbank(F_MEL, 0.0f, audio.sample_rate / 2.0f,
-                                       n_mels, audio.sample_rate, window_size, filterbank);
+    filterbank_config_t config = get_default_filterbank_config(0.0f, audio.sample_rate / 2.0f, n_mels, audio.sample_rate, window_size);
+    filter_bank_t bank = gen_filterbank(&config, filterbank);
     END_TIMING("mel_filterbank");
     
     bounds2d_t bounds = {0};

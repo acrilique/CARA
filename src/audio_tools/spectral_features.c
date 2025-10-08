@@ -200,30 +200,40 @@ void free_stft(stft_t *result) {
 
 
 /**
- * Convert frequency in Hertz to the Mel scale using Slaney scale (librosa default).
+ * Convert frequency in Hertz to the Mel scale.
  *
  * @param hz Frequency in Hertz.
+ * @param variant The Mel scale variant to use.
  * @return Corresponding value on the Mel scale.
  */
-double hz_to_mel(double hz) {
-    if (hz >= min_log_hz) {
-        return min_log_mel + log(hz / min_log_hz) / logstep;
-    } else {
-        return (hz - f_min) / f_sp;
+double hz_to_mel(double hz, mel_variant_t variant) {
+    if (variant == MEL_SLANEY) {
+        if (hz >= min_log_hz) {
+            return min_log_mel + log(hz / min_log_hz) / logstep;
+        } else {
+            return (hz - f_min) / f_sp;
+        }
+    } else { // MEL_HTK
+        return 2595.0 * log10(1.0 + hz / 700.0);
     }
 }
 
 /**
- * Convert a Mel-scale frequency value to linear frequency in Hertz using Slaney scale (librosa default).
+ * Convert a Mel-scale frequency value to linear frequency in Hertz.
  *
  * @param mel Frequency on the Mel scale.
+ * @param variant The Mel scale variant to use.
  * @return Corresponding frequency in Hz.
  */
-double mel_to_hz(double mel) {
-    if (mel >= min_log_mel) {
-        return min_log_hz * exp(logstep * (mel - min_log_mel));
-    } else {
-        return f_min + f_sp * mel;
+double mel_to_hz(double mel, mel_variant_t variant) {
+    if (variant == MEL_SLANEY) {
+        if (mel >= min_log_mel) {
+            return min_log_hz * exp(logstep * (mel - min_log_mel));
+        } else {
+            return f_min + f_sp * mel;
+        }
+    } else { // MEL_HTK
+        return 700.0 * (pow(10.0, mel / 2595.0) - 1.0);
     }
 }
 
@@ -293,26 +303,22 @@ void print_melbank(const filter_bank_t *v) {
  *   returned `filter_bank_t` (freq_indexs and weights) when no longer needed.
  * - Unknown/unsupported `type` results in an error return with no constructed filters.
  */
-filter_bank_t gen_filterbank(filter_type_t type,
-                             float min_f, float max_f,
-                             size_t n_filters, float sr,
-                             size_t fft_size, float *filter) {
+filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
     
     filter_bank_t non_zero = {
         .freq_indexs = NULL,
         .weights     = NULL,
         .size        = 0,
-        .num_filters = n_filters
+        .num_filters = config->num_filters
     };
 
-    // Use fft_size/2 + 1 to match librosa (includes Nyquist bin)
-    const size_t num_f     = fft_size / 2 + 1;
-    const size_t avg_len   = n_filters * num_f;
+    const size_t num_f     = config->include_nyquist ? (config->fft_size / 2 + 1) : (config->fft_size / 2);
+    const size_t avg_len   = config->num_filters * num_f;
     non_zero.freq_indexs   = malloc(avg_len * sizeof(size_t));
     non_zero.weights       = malloc(avg_len * sizeof(float));
     
   
-    double *hz_edges = malloc((n_filters + 2) * sizeof(double));
+    double *hz_edges = malloc((config->num_filters + 2) * sizeof(double));
     if (!hz_edges) {
         ERROR("Failed to allocate hz_edges");
         return non_zero;
@@ -321,56 +327,110 @@ filter_bank_t gen_filterbank(filter_type_t type,
     double (*hz_to_scale)(double) = NULL;
     double (*scale_to_hz)(double) = NULL;
 
-    switch (type) {
-        case F_MEL:     hz_to_scale = hz_to_mel;     scale_to_hz = mel_to_hz; break;
+    switch (config->scale) {
+        case F_MEL:
+            #pragma GCC diagnostic push
+            #pragma GCC diagnostic ignored "-Wcast-function-type"
+            hz_to_scale = (double (*)(double))hz_to_mel;
+            scale_to_hz = (double (*)(double))mel_to_hz;
+            #pragma GCC diagnostic pop
+            break;
         case F_BARK:    hz_to_scale = hz_to_bark;    scale_to_hz = bark_to_hz; break;
         case F_ERB:     hz_to_scale = hz_to_erb;     scale_to_hz = erb_to_hz; break;
         case F_CHIRP:   hz_to_scale = hz_to_chirp;   scale_to_hz = chirp_to_hz; break;
         case F_CAM:     hz_to_scale = hz_to_cam;     scale_to_hz = cam_to_hz; break;
         case F_LOG10:   hz_to_scale = hz_to_log10;   scale_to_hz = log10_to_hz; break;
         default:
-            ERROR("Unknown filterbank type enum: %d", type);
+            ERROR("Unknown filterbank type enum: %d", config->scale);
             free(hz_edges);
             return non_zero;
     }
 
-    double scale_min = hz_to_scale((double)min_f);
-    double scale_max = hz_to_scale((double)max_f);
-    double step      = (scale_max - scale_min) / (double)(n_filters + 1);
+    double scale_min, scale_max;
+    if (config->scale == F_MEL) {
+        scale_min = hz_to_mel(config->fmin, config->scale_variant);
+        scale_max = hz_to_mel(config->fmax, config->scale_variant);
+    } else {
+        scale_min = hz_to_scale(config->fmin);
+        scale_max = hz_to_scale(config->fmax);
+    }
+    
+    double step = (scale_max - scale_min) / (double)(config->num_filters + 1);
 
-    for (size_t i = 0; i < n_filters + 2; i++) {
+    for (size_t i = 0; i < config->num_filters + 2; i++) {
         double scale = scale_min + step * (double)i;
-        hz_edges[i]  = scale_to_hz(scale);
+        if (config->scale == F_MEL) {
+            hz_edges[i] = mel_to_hz(scale, config->scale_variant);
+        } else {
+            hz_edges[i] = scale_to_hz(scale);
+        }
     }
 
-    // Use librosa's exact triangular filter weight calculation
-    for (size_t m = 1; m <= n_filters; m++) {
-        double left_mel   = hz_edges[m - 1];
-        double center_mel = hz_edges[m];
-        double right_mel  = hz_edges[m + 1];
-        
-        double fdiff_left  = center_mel - left_mel;
-        double fdiff_right = right_mel - center_mel;
-        
-        for (size_t k = 0; k < num_f; k++) {
-            double fft_freq = k * sr / (double)fft_size;
+    if (config->ramp_shape == RAMP_TRIANGULAR) {
+        for (size_t m = 1; m <= config->num_filters; m++) {
+            double left_hz   = hz_edges[m - 1];
+            double center_hz = hz_edges[m];
+            double right_hz  = hz_edges[m + 1];
             
-            double ramp_left  = left_mel - fft_freq;
-            double ramp_right = right_mel - fft_freq;
+            double fdiff_left  = center_hz - left_hz;
+            double fdiff_right = right_hz - center_hz;
             
-            double lower = -ramp_left / fdiff_left;
-            double upper = ramp_right / fdiff_right;
-            
-            double weight = fmax(0.0, fmin(lower, upper));
-            
-            // Only store non-zero weights
-            if (weight > 0.0) {
-                non_zero.weights[non_zero.size]     = (float)weight;
-                filter[(m - 1) * num_f + k]         = (float)weight;
-                non_zero.freq_indexs[non_zero.size] = k;
-                non_zero.size++;
+            for (size_t k = 0; k < num_f; k++) {
+                double fft_freq = k * config->sample_rate / (double)config->fft_size;
+                
+                double ramp_left  = left_hz - fft_freq;
+                double ramp_right = right_hz - fft_freq;
+                
+                double lower = -ramp_left / fdiff_left;
+                double upper = ramp_right / fdiff_right;
+                
+                double weight = fmax(0.0, fmin(lower, upper));
+                
+                if (weight > 0.0) {
+                    non_zero.weights[non_zero.size]     = (float)weight;
+                    filter[(m - 1) * num_f + k]         = (float)weight;
+                    non_zero.freq_indexs[non_zero.size] = k;
+                    non_zero.size++;
+                }
             }
         }
+    } else { // RAMP_BINWISE
+        double *bin_edges = malloc((config->num_filters + 2) * sizeof(double));
+        for (size_t i = 0; i < config->num_filters + 2; i++) {
+            bin_edges[i] = hz_edges[i] * (double)(num_f - 1) / (config->sample_rate / 2.0);
+        }
+
+        for (size_t m = 1; m <= config->num_filters; m++) {
+            double left   = bin_edges[m - 1];
+            double center = bin_edges[m];
+            double right  = bin_edges[m + 1];
+
+            int k_start = (int)floor(left);
+            int k_end   = (int)ceil(right);
+
+            for (int k = k_start; k <= k_end; k++) {
+                if (k < 0 || k >= (int)num_f) continue;
+
+                double weight = 0.0;
+                if (k < center) {
+                    if (center - left > 0)
+                        weight = (k - left) / (center - left);
+                } else if (k <= right) {
+                    if (right - center > 0)
+                        weight = (right - k) / (right - center);
+                } else {
+                    continue;
+                }
+
+                if (weight > 0.0) {
+                    non_zero.weights[non_zero.size]     = (float)weight;
+                    filter[(m - 1) * num_f + k]         = (float)weight;
+                    non_zero.freq_indexs[non_zero.size] = k;
+                    non_zero.size++;
+                }
+            }
+        }
+        free(bin_edges);
     }
 
     free(hz_edges);

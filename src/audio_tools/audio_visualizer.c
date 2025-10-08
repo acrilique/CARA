@@ -231,7 +231,7 @@ float *apply_filter_bank(float *cont_mem, size_t num_filters, size_t num_freq, f
  *         allocation fails. Caller is responsible for freeing the returned buffer.
  */
 float *FCC(float *mel_values, dct_t *dft_coff, bounds2d_t *bounds, plot_t *settings) {
-    const bool   db      = settings->db;
+    (void)settings;
     const size_t tstart  = bounds->time.start_d;
     const size_t tend    = bounds->time.end_d;
     const size_t w       = tend - tstart;

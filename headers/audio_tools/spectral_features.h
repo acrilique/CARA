@@ -27,6 +27,29 @@
     */
 
     /**
+     * @brief Ramp/weight calculation types for filterbanks.
+     */
+    typedef enum {
+        RAMP_BINWISE,      /**< Original bin-wise weight calculation (https://i.sstatic.net/amr3C.png) */
+        RAMP_TRIANGULAR,   /**< Librosa-style continuous triangular, default */
+    } ramp_shape_t;
+
+    /**
+     * @brief Mel scale variants.
+     */
+    typedef enum {
+        MEL_HTK = 0,       /**< Original HTK-style Mel scale */
+        MEL_SLANEY = 1,    /**< Librosa-style (Slaney) Mel scale (default) */
+    } mel_variant_t;
+
+    /**
+     * @brief Bark scale variants.
+     */
+    typedef enum {
+        BARK_STANDARD = 0,   /**< Default Bark variant */
+    } bark_variant_t;
+
+    /**
     * @brief Supported filter bank types
     */
     typedef enum {
@@ -40,6 +63,36 @@
     } filter_type_t;
 
     extern const char *FILTER_TYPE_NAMES[];
+
+    // Filterbank configuration structure
+    typedef struct {
+        filter_type_t scale;         // F_MEL, F_BARK, F_ERB, F_CHIRP, F_CAM, F_LOG10; default: F_MEL
+        int scale_variant;           // Variant ID for the selected scale; default: MEL_SLANEY for F_MEL
+        ramp_shape_t ramp_shape;     // Default: RAMP_TRIANGULAR
+        bool include_nyquist;        // Default: true (fft_size/2 + 1 bins)
+        bool normalize;              // Default: true (normalize filter areas to 1)
+        float fmin;                  // Minimum frequency (Hz)
+        float fmax;                  // Maximum frequency (Hz)
+        size_t num_filters;          // Number of filters
+        size_t sample_rate;          // Sample rate (Hz)
+        size_t fft_size;             // FFT size
+    } filterbank_config_t;
+
+    // Function for default initialization
+    static inline filterbank_config_t get_default_filterbank_config(float fmin, float fmax, size_t nfilters, size_t sr, size_t fft_sz) {
+        return (filterbank_config_t) {
+            .scale = F_MEL,
+            .scale_variant = MEL_SLANEY,
+            .ramp_shape = RAMP_TRIANGULAR,
+            .include_nyquist = true,
+            .normalize = true,
+            .fmin = fmin,
+            .fmax = fmax,
+            .num_filters = nfilters,
+            .sample_rate = sr,
+            .fft_size = fft_sz
+        };
+    }
 
     #define M_PI 3.14159265358979323846
 
@@ -104,7 +157,7 @@
     /* ---- Window and Filterbank Utilities ---- */
 
     void window_function(float *window_values, size_t window_size, const char *window_type);
-    filter_bank_t gen_filterbank(filter_type_t type, float min_f, float max_f, size_t n_filters, float sr, size_t fft_size, float *filter);
+    filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter);
     filter_type_t parse_filter_type(const char *name);
     void print_melbank(const filter_bank_t *v);
 
@@ -116,7 +169,8 @@
 
     /* ---- Frequency Scale Conversion ---- */
 
-    double hz_to_mel(double hz);     double mel_to_hz(double mel);
+    double hz_to_mel(double hz, mel_variant_t variant);
+    double mel_to_hz(double mel, mel_variant_t variant);
     double hz_to_bark(double hz);    double bark_to_hz(double bark);
     double hz_to_erb(double hz);     double erb_to_hz(double erb);
     double hz_to_chirp(double hz);   double chirp_to_hz(double chirp);
