@@ -328,7 +328,7 @@ def main():
     metrics = analyze_performance(cara_onset, librosa_onset)
     
     # Create output directory
-    output_dir = Path("CARA/outputs")
+    output_dir = Path("../outputs")
     output_dir.mkdir(exist_ok=True)
     
     # Create comparison plot
