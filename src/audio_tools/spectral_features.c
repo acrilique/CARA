@@ -252,6 +252,16 @@ double cam_to_hz(double cam)      { return 700.0 * (pow(10.0, cam / 45.5) - 1.0)
 double hz_to_log10(double hz)     { return log10(hz + 1.0); }
 double log10_to_hz(double val)    { return pow(10.0, val) - 1.0; }
 
+static mel_variant_t current_mel_variant;
+
+static double hz_to_mel_wrapper(double hz) {
+    return hz_to_mel(hz, current_mel_variant);
+}
+
+static double mel_to_hz_wrapper(double mel) {
+    return mel_to_hz(mel, current_mel_variant);
+}
+
 
 /**
  * Print contents of a mel filter bank to the log.
@@ -327,13 +337,12 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
     double (*hz_to_scale)(double) = NULL;
     double (*scale_to_hz)(double) = NULL;
 
+    current_mel_variant = config->scale_variant;
+
     switch (config->scale) {
         case F_MEL:
-            #pragma GCC diagnostic push
-            #pragma GCC diagnostic ignored "-Wcast-function-type"
-            hz_to_scale = (double (*)(double))hz_to_mel;
-            scale_to_hz = (double (*)(double))mel_to_hz;
-            #pragma GCC diagnostic pop
+            hz_to_scale = hz_to_mel_wrapper;
+            scale_to_hz = mel_to_hz_wrapper;
             break;
         case F_BARK:    hz_to_scale = hz_to_bark;    scale_to_hz = bark_to_hz; break;
         case F_ERB:     hz_to_scale = hz_to_erb;     scale_to_hz = erb_to_hz; break;
