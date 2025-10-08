@@ -258,8 +258,8 @@ test_onset: builtin
 	@echo "Building onset detection test..."
 	$(CC) $(CFLAGS) -DBUILTIN -o test_onset $(TEST_ONSET) $(LDFLAGS)
 	@echo "Running onset detection test..."
+	@mkdir -p outputs cache/FFT tests/out
 	./test_onset
-
 # Clean Build
 clean:
 	rm -rf $(BUILDDIR)
