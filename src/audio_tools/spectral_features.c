@@ -346,6 +346,10 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
     double *hz_edges = malloc((config->num_filters + 2) * sizeof(double));
     if (!hz_edges) {
         ERROR("Failed to allocate hz_edges");
+        free(non_zero.freq_indexs);
+        free(non_zero.weights);
+        non_zero.freq_indexs = NULL;
+        non_zero.weights = NULL;
         return non_zero;
     }
     
@@ -367,6 +371,10 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
         default:
             ERROR("Unknown filterbank type enum: %d", config->scale);
             free(hz_edges);
+            free(non_zero.freq_indexs);
+            free(non_zero.weights);
+            non_zero.freq_indexs = NULL;
+            non_zero.weights     = NULL;
             return non_zero;
     }
 
