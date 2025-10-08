@@ -312,9 +312,9 @@ filter_bank_t gen_filterbank(filter_type_t type,
     non_zero.weights       = malloc(avg_len * sizeof(float));
     
   
-    double *bin_edges = malloc((n_filters + 2) * sizeof(double));
-    if (!bin_edges) {
-        ERROR("Failed to allocate bin_edges");
+    double *hz_edges = malloc((n_filters + 2) * sizeof(double));
+    if (!hz_edges) {
+        ERROR("Failed to allocate hz_edges");
         return non_zero;
     }
     
@@ -330,7 +330,7 @@ filter_bank_t gen_filterbank(filter_type_t type,
         case F_LOG10:   hz_to_scale = hz_to_log10;   scale_to_hz = log10_to_hz; break;
         default:
             ERROR("Unknown filterbank type enum: %d", type);
-            free(bin_edges);  // Don't forget to free!
+            free(hz_edges);
             return non_zero;
     }
 
@@ -340,15 +340,14 @@ filter_bank_t gen_filterbank(filter_type_t type,
 
     for (size_t i = 0; i < n_filters + 2; i++) {
         double scale = scale_min + step * (double)i;
-        double hz    = scale_to_hz(scale);
-        bin_edges[i] = hz * (double)(num_f - 1) / (sr / 2.0);
+        hz_edges[i]  = scale_to_hz(scale);
     }
 
     // Use librosa's exact triangular filter weight calculation
     for (size_t m = 1; m <= n_filters; m++) {
-        double left_mel   = scale_to_hz(scale_min + step * (double)(m - 1));
-        double center_mel = scale_to_hz(scale_min + step * (double)m);
-        double right_mel  = scale_to_hz(scale_min + step * (double)(m + 1));
+        double left_mel   = hz_edges[m - 1];
+        double center_mel = hz_edges[m];
+        double right_mel  = hz_edges[m + 1];
         
         double fdiff_left  = center_mel - left_mel;
         double fdiff_right = right_mel - center_mel;
@@ -374,7 +373,7 @@ filter_bank_t gen_filterbank(filter_type_t type,
         }
     }
 
-    free(bin_edges);
+    free(hz_edges);
     
     non_zero.freq_indexs = realloc(non_zero.freq_indexs, non_zero.size * sizeof(size_t));
     non_zero.weights     = realloc(non_zero.weights,     non_zero.size * sizeof(float));
