@@ -92,13 +92,16 @@ void *aligned_alloc_batch(size_t alignment, size_t size, bool zero_init) {
         return NULL;
     }
 
+    // Round up size to the nearest multiple of alignment
+    size_t rounded_size = (size + alignment - 1) & -alignment;
+
 #ifdef _MSC_VER
-    void *ptr = _aligned_malloc(size, alignment);
+    void *ptr = _aligned_malloc(rounded_size, alignment);
 #else
-    void *ptr = aligned_alloc(alignment, size);
+    void *ptr = aligned_alloc(alignment, rounded_size);
 #endif
     if (!ptr) {
-        ERROR("aligned_alloc failed for size %zu with alignment %zu.", size, alignment);
+        ERROR("aligned_alloc failed for size %zu with alignment %zu.", rounded_size, alignment);
         return NULL;
     }
 
