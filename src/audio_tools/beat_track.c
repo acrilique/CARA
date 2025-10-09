@@ -583,11 +583,18 @@ void convert_beat_units(
 void free_beat_result(beat_result_t *result) {
     if (!result) return;
     
-    free(result->beat_times);
-    free(result->beat_frames);
-    free(result->beat_mask);
-    
-    memset(result, 0, sizeof(beat_result_t));
+    if (result->beat_times) {
+        free(result->beat_times);
+        result->beat_times = NULL;
+    }
+    if (result->beat_frames) {
+        free(result->beat_frames);
+        result->beat_frames = NULL;
+    }
+    if (result->beat_mask) {
+        free(result->beat_mask);
+        result->beat_mask = NULL;
+    }
 }
 
 // Helper function implementations

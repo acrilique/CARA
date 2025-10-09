@@ -153,14 +153,10 @@ autocorr_result_t compute_onset_autocorr(
     
     // Allocate result arrays
     result.autocorr = (float *)malloc(max_lag * sizeof(float));
-    result.bpm_freqs = (float *)malloc(max_lag * sizeof(float));
+    result.bpm_freqs = NULL; // Will be computed by the caller
     
-    if (!result.autocorr || !result.bpm_freqs) {
-        ERROR("Failed to allocate autocorrelation result arrays");
-        free(result.autocorr);
-        free(result.bpm_freqs);
-        result.autocorr = NULL;
-        result.bpm_freqs = NULL;
+    if (!result.autocorr) {
+        ERROR("Failed to allocate autocorrelation result array");
         goto cleanup;
     }
     
@@ -181,10 +177,8 @@ autocorr_result_t compute_onset_autocorr(
     result.length = max_lag;
     result.max_lag_seconds = (float)max_lag / frame_rate;
     
-    // BPM frequencies will be computed by caller using tempo_frequencies()
-    // For now, set to NULL to indicate they need to be computed
-    free(result.bpm_freqs);
-    result.bpm_freqs = NULL;
+    // BPM frequencies will be computed by the caller.
+    // The pointer is already NULL.
     
 cleanup:
     // Cleanup
