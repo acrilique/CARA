@@ -486,6 +486,7 @@ filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
         ERROR("Failed to reallocate weights");
         free(non_zero.freq_indexs);
         free(non_zero.weights);
+        free(hz_edges);
         non_zero.freq_indexs = NULL;
         non_zero.weights = NULL;
         non_zero.size = 0;
