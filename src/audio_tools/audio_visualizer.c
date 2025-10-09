@@ -145,7 +145,7 @@ inline void plot(float *data, bounds2d_t *bounds, plot_t *settings) {
     }
 
     save_heatmap(&hm, settings->output_file, w, h, settings->bg_color, settings->cs_enum);
-    free(hm);
+    heatmap_free(hm);
 }
 
 /*
