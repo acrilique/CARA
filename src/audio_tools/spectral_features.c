@@ -1,11 +1,3 @@
-#include "audio_tools/spectral_features.h"
-
-
-#define ALIGNED_ALLOC_ALIGNMENT 32
-
-
-unsigned int n_threads = 1;
-
 /*
  * The MIT License (MIT)
  * 
@@ -29,6 +21,21 @@ unsigned int n_threads = 1;
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+#include "audio_tools/spectral_features.h"
+
+
+#define ALIGNED_ALLOC_ALIGNMENT 32
+
+
+unsigned int n_threads = 1;
+
+// Slaney scale constants
+static const double f_min = 0.0;
+static const double f_sp = 200.0 / 3.0;
+static const double min_log_hz = 1000.0;
+static const double min_log_mel = (1000.0 - 0.0) / (200.0 / 3.0);
+static const double logstep = 1.8562979903656262 / 27.0; // log(6.4) / 27.0
 
 /**
  * Compute the modified Bessel function of the first kind of order zero, I0(x).
@@ -196,16 +203,39 @@ void free_stft(stft_t *result) {
  * Convert frequency in Hertz to the Mel scale.
  *
  * @param hz Frequency in Hertz.
+ * @param variant The Mel scale variant to use.
  * @return Corresponding value on the Mel scale.
  */
-double hz_to_mel(double hz)       { return 2595.0 * log10(1.0 + hz / 700.0); }
+double hz_to_mel(double hz, mel_variant_t variant) {
+    if (variant == MEL_SLANEY) {
+        if (hz >= min_log_hz) {
+            return min_log_mel + log(hz / min_log_hz) / logstep;
+        } else {
+            return (hz - f_min) / f_sp;
+        }
+    } else { // MEL_HTK
+        return 2595.0 * log10(1.0 + hz / 700.0);
+    }
+}
+
 /**
  * Convert a Mel-scale frequency value to linear frequency in Hertz.
  *
  * @param mel Frequency on the Mel scale.
+ * @param variant The Mel scale variant to use.
  * @return Corresponding frequency in Hz.
  */
-double mel_to_hz(double mel)      { return 700.0 * (pow(10.0, mel / 2595.0) - 1.0); }
+double mel_to_hz(double mel, mel_variant_t variant) {
+    if (variant == MEL_SLANEY) {
+        if (mel >= min_log_mel) {
+            return min_log_hz * exp(logstep * (mel - min_log_mel));
+        } else {
+            return f_min + f_sp * mel;
+        }
+    } else { // MEL_HTK
+        return 700.0 * (pow(10.0, mel / 2595.0) - 1.0);
+    }
+}
 
 double hz_to_bark(double hz)      { return 6.0 * asinh(hz / 600.0); }
 double bark_to_hz(double bark)    { return 600.0 * sinh(bark / 6.0); }
@@ -221,6 +251,16 @@ double cam_to_hz(double cam)      { return 700.0 * (pow(10.0, cam / 45.5) - 1.0)
 
 double hz_to_log10(double hz)     { return log10(hz + 1.0); }
 double log10_to_hz(double val)    { return pow(10.0, val) - 1.0; }
+
+static mel_variant_t current_mel_variant;
+
+static double hz_to_mel_wrapper(double hz) {
+    return hz_to_mel(hz, current_mel_variant);
+}
+
+static double mel_to_hz_wrapper(double mel) {
+    return mel_to_hz(mel, current_mel_variant);
+}
 
 
 /**
@@ -273,87 +313,189 @@ void print_melbank(const filter_bank_t *v) {
  *   returned `filter_bank_t` (freq_indexs and weights) when no longer needed.
  * - Unknown/unsupported `type` results in an error return with no constructed filters.
  */
-filter_bank_t gen_filterbank(filter_type_t type,
-                             float min_f, float max_f,
-                             size_t n_filters, float sr,
-                             size_t fft_size, float *filter) {
+filter_bank_t gen_filterbank(const filterbank_config_t *config, float *filter) {
     
     filter_bank_t non_zero = {
         .freq_indexs = NULL,
         .weights     = NULL,
         .size        = 0,
-        .num_filters = n_filters
     };
 
-    const size_t num_f     = fft_size / 2;
-    const size_t avg_len   = n_filters * num_f;
+    if (!config || config->num_filters == 0 || config->fmax <= config->fmin || config->sample_rate == 0 || config->fft_size == 0) {
+        ERROR("Invalid filterbank configuration: num_filters=%zu, fmax=%.2f, fmin=%.2f, sample_rate=%zu, fft_size=%zu",
+              config ? config->num_filters : 0, config ? config->fmax : 0.0, config ? config->fmin : 0.0, config ? config->sample_rate : 0, config ? config->fft_size : 0);
+        return non_zero;
+    }
+
+    non_zero.num_filters = config->num_filters;
+
+    const size_t num_f     = config->include_nyquist ? (config->fft_size / 2 + 1) : (config->fft_size / 2);
+    const size_t avg_len   = config->num_filters * num_f;
     non_zero.freq_indexs   = malloc(avg_len * sizeof(size_t));
+    if (!non_zero.freq_indexs) {
+        ERROR("Failed to allocate freq_indexs");
+        return non_zero;
+    }
     non_zero.weights       = malloc(avg_len * sizeof(float));
-    
-  
-    double *bin_edges = malloc((n_filters + 2) * sizeof(double));
-    if (!bin_edges) {
-        ERROR("Failed to allocate bin_edges");
+    if (!non_zero.weights) {
+        ERROR("Failed to allocate weights");
+        free(non_zero.freq_indexs);
+        return non_zero;
+    }
+
+    double *hz_edges = malloc((config->num_filters + 2) * sizeof(double));
+    if (!hz_edges) {
+        ERROR("Failed to allocate hz_edges");
+        free(non_zero.freq_indexs);
+        free(non_zero.weights);
+        non_zero.freq_indexs = NULL;
+        non_zero.weights = NULL;
         return non_zero;
     }
     
     double (*hz_to_scale)(double) = NULL;
     double (*scale_to_hz)(double) = NULL;
 
-    switch (type) {
-        case F_MEL:     hz_to_scale = hz_to_mel;     scale_to_hz = mel_to_hz; break;
+    current_mel_variant = config->scale_variant;
+
+    switch (config->scale) {
+        case F_MEL:
+            hz_to_scale = hz_to_mel_wrapper;
+            scale_to_hz = mel_to_hz_wrapper;
+            break;
         case F_BARK:    hz_to_scale = hz_to_bark;    scale_to_hz = bark_to_hz; break;
         case F_ERB:     hz_to_scale = hz_to_erb;     scale_to_hz = erb_to_hz; break;
         case F_CHIRP:   hz_to_scale = hz_to_chirp;   scale_to_hz = chirp_to_hz; break;
         case F_CAM:     hz_to_scale = hz_to_cam;     scale_to_hz = cam_to_hz; break;
         case F_LOG10:   hz_to_scale = hz_to_log10;   scale_to_hz = log10_to_hz; break;
         default:
-            ERROR("Unknown filterbank type enum: %d", type);
-            free(bin_edges);  // Don't forget to free!
+            ERROR("Unknown filterbank type enum: %d", config->scale);
+            free(hz_edges);
+            free(non_zero.freq_indexs);
+            free(non_zero.weights);
+            non_zero.freq_indexs = NULL;
+            non_zero.weights     = NULL;
             return non_zero;
     }
 
-    double scale_min = hz_to_scale((double)min_f);
-    double scale_max = hz_to_scale((double)max_f);
-    double step      = (scale_max - scale_min) / (double)(n_filters + 1);
-
-    for (size_t i = 0; i < n_filters + 2; i++) {
-        double scale = scale_min + step * (double)i;
-        double hz    = scale_to_hz(scale);
-        bin_edges[i] = hz * (double)(num_f) / (sr / 2.0);
+    double scale_min, scale_max;
+    if (config->scale == F_MEL) {
+        scale_min = hz_to_mel(config->fmin, config->scale_variant);
+        scale_max = hz_to_mel(config->fmax, config->scale_variant);
+    } else {
+        scale_min = hz_to_scale(config->fmin);
+        scale_max = hz_to_scale(config->fmax);
     }
+    
+    double step = (scale_max - scale_min) / (double)(config->num_filters + 1);
 
-    for (size_t m = 1; m <= n_filters; m++) {
-        double left   = bin_edges[m - 1];
-        double center = bin_edges[m];
-        double right  = bin_edges[m + 1];
-
-        int k_start = (int)floor(left);
-        int k_end   = (int)ceil(right);
-
-        for (int k = k_start; k <= k_end; k++) {
-            if (k < 0 || k >= (int)num_f) continue;
-
-            double weight = 0.0;
-            if (k < center) {
-                weight = (k - left) / (center - left);
-            } else if (k <= right) {
-                weight = (right - k) / (right - center);
-            } else {
-                continue;
-            }
-
-            non_zero.weights[non_zero.size]     = (float)weight;
-            filter[(m - 1) * num_f + k]         = (float)weight;
-            non_zero.freq_indexs[non_zero.size] = k;
-            non_zero.size++;
+    for (size_t i = 0; i < config->num_filters + 2; i++) {
+        double scale = scale_min + step * (double)i;
+        if (config->scale == F_MEL) {
+            hz_edges[i] = mel_to_hz(scale, config->scale_variant);
+        } else {
+            hz_edges[i] = scale_to_hz(scale);
         }
     }
 
-    free(bin_edges);
+    if (config->ramp_shape == RAMP_TRIANGULAR) {
+        for (size_t m = 1; m <= config->num_filters; m++) {
+            double left_hz   = hz_edges[m - 1];
+            double center_hz = hz_edges[m];
+            double right_hz  = hz_edges[m + 1];
+            
+            double fdiff_left  = center_hz - left_hz;
+            double fdiff_right = right_hz - center_hz;
+
+            // Guard against division by zero
+            if (fdiff_left <= 0.0 || fdiff_right <= 0.0) continue;
+            
+            for (size_t k = 0; k < num_f; k++) {
+                double fft_freq = k * config->sample_rate / (double)config->fft_size;
+                
+                double ramp_left  = left_hz - fft_freq;
+                double ramp_right = right_hz - fft_freq;
+                
+                double lower = -ramp_left / fdiff_left;
+                double upper = ramp_right / fdiff_right;
+                
+                double weight = fmax(0.0, fmin(lower, upper));
+                
+                if (weight > 0.0 && non_zero.size < avg_len) {
+                    non_zero.weights[non_zero.size]     = (float)weight;
+                    filter[(m - 1) * num_f + k]         = (float)weight;
+                    non_zero.freq_indexs[non_zero.size] = k;
+                    non_zero.size++;
+                }
+            }
+        }
+    } else { // RAMP_BINWISE
+        double *bin_edges = malloc((config->num_filters + 2) * sizeof(double));
+        for (size_t i = 0; i < config->num_filters + 2; i++) {
+            bin_edges[i] = hz_edges[i] * (double)(num_f - 1) / (config->sample_rate / 2.0);
+        }
+
+        for (size_t m = 1; m <= config->num_filters; m++) {
+            double left   = bin_edges[m - 1];
+            double center = bin_edges[m];
+            double right  = bin_edges[m + 1];
+
+            int k_start = (int)floor(left);
+            int k_end   = (int)ceil(right);
+
+            for (int k = k_start; k <= k_end; k++) {
+                if (k < 0 || k >= (int)num_f) continue;
+
+                double weight = 0.0;
+                if (k < center) {
+                    double denom = center - left;
+                    if (denom > 0)
+                        weight = (k - left) / denom;
+                } else if (k <= right) {
+                    double denom = right - center;
+                    if (denom > 0)
+                        weight = (right - k) / denom;
+                } else {
+                    continue;
+                }
+
+                if (weight > 0.0 && non_zero.size < avg_len) {
+                    non_zero.weights[non_zero.size]     = (float)weight;
+                    filter[(m - 1) * num_f + k]         = (float)weight;
+                    non_zero.freq_indexs[non_zero.size] = k;
+                    non_zero.size++;
+                }
+            }
+        }
+        free(bin_edges);
+    }
+
+    free(hz_edges);
     
-    non_zero.freq_indexs = realloc(non_zero.freq_indexs, non_zero.size * sizeof(size_t));
-    non_zero.weights     = realloc(non_zero.weights,     non_zero.size * sizeof(float));
+    // Reallocate with temporary pointers to avoid memory leaks on failure
+    size_t* temp_freq_indexs = realloc(non_zero.freq_indexs, non_zero.size * sizeof(size_t));
+    if (non_zero.size > 0 && !temp_freq_indexs) {
+        ERROR("Failed to reallocate freq_indexs");
+        free(non_zero.freq_indexs);
+        free(non_zero.weights);
+        non_zero.freq_indexs = NULL;
+        non_zero.weights = NULL;
+        non_zero.size = 0;
+        return non_zero;
+    }
+    non_zero.freq_indexs = temp_freq_indexs;
+
+    float* temp_weights = realloc(non_zero.weights, non_zero.size * sizeof(float));
+    if (non_zero.size > 0 && !temp_weights) {
+        ERROR("Failed to reallocate weights");
+        free(non_zero.freq_indexs);
+        free(non_zero.weights);
+        non_zero.freq_indexs = NULL;
+        non_zero.weights = NULL;
+        non_zero.size = 0;
+        return non_zero;
+    }
+    non_zero.weights = temp_weights;
 
     return non_zero;
 }
@@ -392,8 +534,8 @@ bool init_fft_output(stft_t *result, unsigned int window_size, unsigned int hop_
     result->phasers         = NULL;
     result->magnitudes      = NULL;
     result->frequencies     = NULL;
-    result->num_frequencies = window_size / 2;
-    result->output_size     = (num_samples - window_size) / hop_size + 1; 
+    result->num_frequencies = window_size / 2 + 1;
+    result->output_size     = (num_samples - window_size) / hop_size + 1;
 
     size_t magnitudes_size  = result->num_frequencies * result->output_size * sizeof(float);
     size_t phasers_size     = result->num_frequencies * 2 * result->output_size * sizeof(float);
@@ -497,7 +639,7 @@ void window_function(float *window_values, size_t window_size, const char *windo
  * @param sample_rate Sample rate in Hz used to convert bin indices to frequencies.
  */
 void calculate_frequencies(stft_t *result, size_t window_size, float sample_rate) {
-    size_t half_window_size = window_size / 2;
+    size_t half_window_size = window_size / 2 + 1;
     float scale = sample_rate / window_size;
     result->frequencies = (float*)malloc(half_window_size * sizeof(float));
     if (!result->frequencies) {

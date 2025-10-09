@@ -178,8 +178,9 @@ int main(int argc, char *argv[]) {
             START_TIMING();
             filterbank         = (float*) calloc((num_frequencies + 1) * (opts.num_mel_filters + 2), sizeof(float));
             LOG("Processing filterbank type: %d", opts.filterbank_type);
-            bank               = gen_filterbank(opts.filterbank_type, opts.min_mel_freq, opts.max_mel_freq,
-                                                opts.num_mel_filters, audio.sample_rate, opts.window_size, filterbank);
+            filterbank_config_t config = get_default_filterbank_config(opts.min_mel_freq, opts.max_mel_freq, opts.num_mel_filters, audio.sample_rate, opts.window_size);
+            config.scale = opts.filterbank_type;
+            bank               = gen_filterbank(&config, filterbank);
             END_TIMING("pre:mel");
         }
 
