@@ -4,6 +4,7 @@ project(CARA C)
 set(CMAKE_C_STANDARD 11)
 
 # Compiler flags for optimization (matching CARA's Makefile)
+# TODO optimize MSVC and clang
 if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -march=native -mtune=native -funroll-loops -fpeel-loops -ftracer -flto -fuse-linker-plugin -floop-block -floop-interchange -floop-unroll-and-jam -fipa-pta -fipa-cp -fipa-sra -fipa-icf -fno-unsafe-math-optimizations")
     # Vectorization flags
