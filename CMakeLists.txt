@@ -85,12 +85,15 @@ if(APPLE)
         ${PNG_LIBRARY_DIRS}
     )
 
-    target_link_libraries(CARA PUBLIC
-        FFTW3::FFTW3
-        PkgConfig::SNDFILE
-        PNG::PNG
-        OpenMP::OpenMP_C
-    )
+target_link_libraries(CARA INTERFACE
+    PNG::PNG
+)
+
+target_link_libraries(CARA PUBLIC
+    FFTW3::FFTW3
+    PkgConfig::SNDFILE
+    OpenMP::OpenMP_C
+)
 else()
     target_include_directories(CARA PUBLIC
         ${PNG_INCLUDE_DIRS}
