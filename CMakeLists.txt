@@ -38,16 +38,7 @@ else()
     # Find OpenMP
     if(APPLE)
         if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
-            # For x86_64, get the correct brew prefix and set flags for keg-only libomp
-            execute_process(
-                COMMAND arch -x86_64 /usr/local/bin/brew --prefix libomp
-                OUTPUT_VARIABLE LIBOMP_PREFIX
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-            )
-            if(LIBOMP_PREFIX)
-                set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${LIBOMP_PREFIX}/include")
-                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${LIBOMP_PREFIX}/lib")
-            endif()
+            set(OPENMP_ROOT "/usr/local/opt/libomp")
         else()
             # For arm64, get the standard brew prefix
             execute_process(COMMAND brew --prefix OUTPUT_VARIABLE BREW_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
