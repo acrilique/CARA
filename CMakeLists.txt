@@ -14,7 +14,7 @@ endif()
 add_definitions(-DMINIMP3_FLOAT_OUTPUT -DLOG_LEVEL=1 -DBUILTIN)
 
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
-    find_package(FFTW3 CONFIG REQUIRED)
+    find_package(FFTW3f CONFIG REQUIRED)
     find_package(SndFile CONFIG REQUIRED)
     find_package(OpenBLAS CONFIG REQUIRED)
     find_package(PNG CONFIG REQUIRED)
@@ -111,12 +111,20 @@ else()
         OpenMP::OpenMP_C
     )
 
-    target_link_libraries(CARA PUBLIC
+    if(MSVC)
+        target_link_libraries(CARA PUBLIC
+        FFTW3::FFTW3f
+        SndFile::sndfile
+        PNG::PNG
+        OpenMP::OpenMP_C
+        OpenBLAS::OpenBLAS)
+    else()
+        target_link_libraries(CARA PUBLIC
         FFTW3::FFTW3
         PkgConfig::SNDFILE
         PNG::PNG
-        OpenMP::OpenMP_C
-    )
+        OpenMP::OpenMP_C)
+    endif()
 endif()
 
 # --- Link OpenMP, BLAS/Accelerate, and Math Library ---
