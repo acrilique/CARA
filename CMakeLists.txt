@@ -73,6 +73,8 @@ target_include_directories(CARA PUBLIC
 
 if(MSVC)
     target_compile_options(CARA PUBLIC /openmp)
+else()
+    find_package(OpenMP COMPONENTS C REQUIRED)
 endif()
 
 # System dependencies
@@ -105,14 +107,13 @@ else()
         OpenMP::OpenMP_C
     )
 
-    if(MSVC)
-        target_link_libraries(CARA PUBLIC
-        FFTW3::fftw3f
-        SndFile::sndfile
-        PNG::PNG
-        OpenMP::OpenMP_C
-        OpenBLAS::OpenBLAS)
-    else()
+if(MSVC)
+    target_link_libraries(CARA PUBLIC
+    FFTW3::fftw3f
+    SndFile::sndfile
+    PNG::PNG
+    OpenBLAS::OpenBLAS)
+else()
         target_link_libraries(CARA PUBLIC
         FFTW3::FFTW3
         PkgConfig::SNDFILE
