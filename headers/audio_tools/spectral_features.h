@@ -18,8 +18,11 @@
     #include <fftw3.h>
     #include <string.h>
     #include <omp.h>
-    #include <cblas.h>
-
+    #ifdef __APPLE__
+        #include <Accelerate/Accelerate.h>
+    #else
+        #include <cblas.h>
+    #endif
     #include "audio_io.h"
 
     /** @addtogroup audio_features

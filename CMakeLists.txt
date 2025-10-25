@@ -4,7 +4,6 @@ project(CARA C)
 set(CMAKE_C_STANDARD 11)
 
 # Compiler flags for optimization (matching CARA's Makefile)
-# TODO optimize MSVC and clang
 if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -march=native -mtune=native -funroll-loops -fpeel-loops -ftracer -flto -fuse-linker-plugin -floop-block -floop-interchange -floop-unroll-and-jam -fipa-pta -fipa-cp -fipa-sra -fipa-icf -fno-unsafe-math-optimizations")
     # Vectorization flags
@@ -16,110 +15,105 @@ add_definitions(-DMINIMP3_FLOAT_OUTPUT -DLOG_LEVEL=1 -DBUILTIN)
 
 if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
     find_package(FFTW3 CONFIG REQUIRED)
-    find_package(FFTW3f CONFIG REQUIRED)
     find_package(SndFile CONFIG REQUIRED)
     find_package(OpenBLAS CONFIG REQUIRED)
     find_package(PNG CONFIG REQUIRED)
 else()
-    # Find required packages
     find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FFTW3 REQUIRED fftw3f)
+    pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 
-    # Find FFTW3
-    pkg_check_modules(FFTW3 REQUIRED fftw3 fftw3f)
-
-    # Find libsndfile
-    pkg_check_modules(SNDFILE REQUIRED sndfile)
-
-    # Find OpenBLAS
+    # Create imported target for FFTW3 to enable proper dependency propagation
+    if(NOT TARGET FFTW3::FFTW3)
+        find_library(FFTW3_LIBRARY NAMES fftw3f PATHS ${FFTW3_LIBRARY_DIRS})
+        add_library(FFTW3::FFTW3 UNKNOWN IMPORTED)
+        set_target_properties(FFTW3::FFTW3 PROPERTIES
+            IMPORTED_LOCATION "${FFTW3_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${FFTW3_INCLUDE_DIRS}"
+            INTERFACE_LINK_DIRECTORIES "${FFTW3_LIBRARY_DIRS}"
+        )
+    endif()
     find_package(BLAS REQUIRED)
-
-    # Find PNG (for visualization features)
     find_package(PNG REQUIRED)
-endif()
-
-# omp on macos
-if(EXISTS "/opt/homebrew/opt/libomp/include")
-    message(STATUS "Found libomp include directory")
-    include_directories("/opt/homebrew/opt/libomp/include")
-endif()
-
-# Find OpenMP
-if(NOT MSVC)
-    find_package(OpenMP REQUIRED)
+    # Find OpenMP
+    if(APPLE)
+        execute_process(COMMAND brew --prefix OUTPUT_VARIABLE BREW_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
+        set(OPENMP_ROOT "${BREW_PREFIX}/opt/libomp")
+    endif()
+    find_package(OpenMP COMPONENTS C REQUIRED)
 endif()
 
 # Include directories
 include_directories(headers)
 
-# Source files - include all CARA sources
+# Source files
 file(GLOB_RECURSE CARA_SOURCES
     "src/audio_tools/*.c"
     "src/utils/*.c"
     "src/libheatmap/*.c"
     "src/png_tools/*.c"
 )
-
-# Exclude main.c and test files
 list(FILTER CARA_SOURCES EXCLUDE REGEX "main\\.c$")
 list(FILTER CARA_SOURCES EXCLUDE REGEX "test_.*\\.c$")
 
 # Create CARA library
 add_library(CARA STATIC ${CARA_SOURCES})
 
-if(EXISTS "/usr/include/openblas")
-    target_include_directories(CARA PUBLIC "/usr/include/openblas")
-endif()
-if(EXISTS "/opt/homebrew/opt/openblas/include")
-    target_include_directories(CARA PUBLIC "/opt/homebrew/opt/openblas/include")
-endif()
+# --- Use target_* commands for modern CMake properties ---
+# This is better than global include_directories or link_libraries
+
+target_include_directories(CARA PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/headers"
+)
 
 if(MSVC)
     target_compile_options(CARA PUBLIC /openmp)
 endif()
 
-# Link libraries
-if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
+# System dependencies
+if(APPLE)
+    target_include_directories(CARA PUBLIC
+        ${PNG_INCLUDE_DIRS}
+    )
+
+    target_link_directories(CARA PUBLIC
+        ${PNG_LIBRARY_DIRS}
+    )
+
     target_link_libraries(CARA PUBLIC
-        FFTW3::fftw3
-        FFTW3::fftw3f
-        SndFile::sndfile
-        OpenBLAS::OpenBLAS
+        FFTW3::FFTW3
+        PkgConfig::SNDFILE
         PNG::PNG
+        OpenMP::OpenMP_C
     )
 else()
-    target_link_libraries(CARA PUBLIC
-        ${FFTW3_LIBRARIES}
-        ${SNDFILE_LIBRARIES}
-        ${BLAS_LIBRARIES}
-        PNG::PNG
+    target_include_directories(CARA PUBLIC
+        ${PNG_INCLUDE_DIRS}
+        OpenMP::OpenMP_C
     )
+
+    target_link_directories(CARA PUBLIC
+        ${PNG_LIBRARY_DIRS}
+        OpenMP::OpenMP_C
+    )
+
+    target_link_libraries(CARA PUBLIC
+        FFTW3::FFTW3
+        PkgConfig::SNDFILE
+        PNG::PNG
+        OpenMP::OpenMP_C
+    )
+endif()
+
+# --- Link OpenMP, BLAS/Accelerate, and Math Library ---
+if(APPLE)
+    target_link_libraries(CARA PUBLIC ${ACCELERATE_FRAMEWORK})
+elseif(NOT MSVC)
+    target_link_libraries(CARA PUBLIC OpenMP::OpenMP_C ${BLAS_LIBRARIES})
 endif()
 
 if(NOT MSVC)
-    target_link_libraries(CARA PUBLIC OpenMP::OpenMP_C m)
+    target_link_libraries(CARA PUBLIC m)
 endif()
 
-# Include directories for linking
-if(CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake")
-    target_include_directories(CARA PUBLIC 
-        ${CMAKE_CURRENT_SOURCE_DIR}/headers
-    )
-else()
-    target_include_directories(CARA PUBLIC 
-        ${CMAKE_CURRENT_SOURCE_DIR}/headers
-        ${FFTW3_INCLUDE_DIRS}
-        ${SNDFILE_INCLUDE_DIRS}
-    )
-endif()
-
-
-if(NOT (CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES ".*/vcpkg.cmake"))
-    # Compiler flags
-    target_compile_options(CARA PUBLIC 
-        ${FFTW3_CFLAGS_OTHER}
-        ${SNDFILE_CFLAGS_OTHER}
-    )
-endif()
-
-# Create alias for easier linking
 add_library(CARA::CARA ALIAS CARA)
