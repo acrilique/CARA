@@ -99,12 +99,11 @@ target_link_libraries(CARA PUBLIC
 else()
     target_include_directories(CARA PUBLIC
         ${PNG_INCLUDE_DIRS}
-        OpenMP::OpenMP_C
+        /usr/include/openblas
     )
 
     target_link_directories(CARA PUBLIC
         ${PNG_LIBRARY_DIRS}
-        OpenMP::OpenMP_C
     )
 
 if(MSVC)
@@ -118,7 +117,8 @@ else()
         FFTW3::FFTW3
         PkgConfig::SNDFILE
         PNG::PNG
-        OpenMP::OpenMP_C)
+        OpenMP::OpenMP_C
+        ${BLAS_LIBRARIES})
     endif()
 endif()
 
